@@ -6,7 +6,8 @@
       "id": "appleNewsFunction",
       "name": "Apple News Function",
       "description": "Handles publish/update/delete/status for Apple News Publisher",
-      "path": "functions/index.ts",
+      "path": "functions/index.js",
+      "entryFile": "functions/index.ts",
       "allowNetworks": ["https://news-api.apple.com"],
       "accepts": ["appaction.call"]
     }

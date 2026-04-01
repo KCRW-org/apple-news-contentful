@@ -18,7 +18,7 @@
     "start": "vite",
     "dev": "vite",
     "build": "vite build && npm run build:functions",
-    "build:functions": "contentful-app-scripts build-functions --ci",
+    "build:functions": "contentful-app-scripts build-functions --ci --esbuild-config esbuild.functions.cjs",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
