@@ -57,7 +57,7 @@ export async function resolveStory(
     audioLink ? resolveAudioEntry(audioLink.sys.id, locale, ctx) : Promise.resolve(null),
     videoLink ? resolveVideoEntry(videoLink.sys.id, locale, ctx) : Promise.resolve(null),
     ...embeddedIds.map(id => resolveBodyEmbed(id, locale, ctx, embedMap)),
-    ...hyperlinkIds.map(id => resolveHyperlink(id, ctx, linkMap, params.canonicalUrlTemplate ?? '')),
+    ...hyperlinkIds.map(id => resolveHyperlink(id, locale, ctx, linkMap, params.canonicalUrlTemplate ?? '')),
   ]);
 
   const byline =
@@ -128,7 +128,7 @@ async function resolveAudioEntry(
   try {
     const entry = await ctx.cma.entry.get({ spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId: id });
     const rawFields = (entry.fields ?? {}) as Record<string, Record<string, unknown>>;
-    const url = rawFields['mediaUrl']?.[locale] as string | undefined;
+    const url = rawFields[MEDIA_LINK_SUBFIELDS.mediaUrl]?.[locale] as string | undefined;
     return url ? { url } : null;
   } catch {
     return null;
@@ -143,7 +143,7 @@ async function resolveVideoEntry(
   try {
     const entry = await ctx.cma.entry.get({ spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId: id });
     const rawFields = (entry.fields ?? {}) as Record<string, Record<string, unknown>>;
-    const url = rawFields['mediaUrl']?.[locale] as string | undefined;
+    const url = rawFields[MEDIA_LINK_SUBFIELDS.mediaUrl]?.[locale] as string | undefined;
     return url ? { url } : null;
   } catch {
     return null;
@@ -183,6 +183,7 @@ async function resolveBodyEmbed(
 
 async function resolveHyperlink(
   id: string,
+  locale: string,
   ctx: CmaContext,
   linkMap: Map<string, string | null>,
   canonicalUrlTemplate: string,
@@ -190,11 +191,10 @@ async function resolveHyperlink(
   try {
     const entry = await ctx.cma.entry.get({ spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId: id });
     const rawFields = (entry.fields ?? {}) as Record<string, Record<string, unknown>>;
-    const locale = 'en-US';
     const __typename = (entry.sys as { contentType?: { sys?: { id?: string } } }).contentType?.sys?.id ?? '';
-    const slug = rawFields['slug']?.[locale] as string | undefined;
-    const showsCollection = rawFields['showsCollection']?.[locale] as { items?: { fields?: Record<string, Record<string, unknown>> }[] } | undefined;
-    const parentSlug = showsCollection?.items?.[0]?.fields?.['slug']?.['en-US'] as string | undefined;
+    const slug = rawFields[FIELD_NAMES.slug]?.[locale] as string | undefined;
+    const showsCollection = rawFields[FIELD_NAMES.showsCollection]?.[locale] as { items?: { fields?: Record<string, Record<string, unknown>> }[] } | undefined;
+    const parentSlug = showsCollection?.items?.[0]?.fields?.[FIELD_NAMES.slug]?.[locale] as string | undefined;
     const url = resolveEntryUrl({ __typename, slug, parentSlug }, canonicalUrlTemplate);
     linkMap.set(id, url);
   } catch {

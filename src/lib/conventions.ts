@@ -22,6 +22,7 @@ export const FIELD_NAMES = {
   audioMedia: 'audioMedia',               // Linked entry for top-level audio player
   videoMedia: 'videoMedia',               // Linked entry for top-level YouTube embed
   appleNewsData: 'appleNewsData',         // Hidden JSON field for storing Apple News publish state
+  showsCollection: 'showsCollection',     // Used by resolveHyperlink to find parent show slug for Story entries
 };
 
 // Content type IDs for linked entries
