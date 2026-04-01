@@ -96,7 +96,7 @@ async function appleNewsRequest(
     fetchInit = {
       method,
       headers: { Authorization: authorization, 'Content-Type': contentType },
-      body,
+      body: body as BodyInit,
     };
   } else {
     const authorization = createSignature(method, url, date, credentials.apiKeyId, credentials.apiKeySecret);
