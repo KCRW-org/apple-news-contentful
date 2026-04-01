@@ -171,9 +171,9 @@ async function resolveBodyEmbed(
       const url = fields[MEDIA_LINK_SUBFIELDS.mediaUrl] as string | undefined;
       const hosting = fields[MEDIA_LINK_SUBFIELDS.hosting] as string | undefined;
       if (url && hosting === 'youtube') {
-        embedMap.set(id, { type: 'mediaLink', type: 'youtube', url } as any);
+        embedMap.set(id, { type: 'youtube', url });
       } else if (url && hosting === 'soundstack') {
-        embedMap.set(id, { type: 'mediaLink', type: 'soundstack', url } as any);
+        embedMap.set(id, { type: 'soundstack', url });
       }
     }
   } catch {

@@ -58,7 +58,7 @@ export type ResolvedMediaLink =
 
 export type ResolvedEmbed =
   | ({ type: 'photo' } & ResolvedImage)
-  | ({ type: 'mediaLink' } & ResolvedMediaLink);
+  | ResolvedMediaLink;
 
 export type ResolvedStory = {
   title: string;
