@@ -11,8 +11,27 @@ import {
 import { useSDK } from '@contentful/react-apps-toolkit';
 import type { AppInstallationParameters } from '../types';
 
+function parseJsonError(value: string, e: SyntaxError): string {
+  // V8 (Chrome/Node): "Unexpected token } in JSON at position 42"
+  const posMatch = e.message.match(/at position (\d+)/);
+  if (posMatch) {
+    const pos = parseInt(posMatch[1], 10);
+    const before = value.slice(0, pos).split('\n');
+    const line = before.length;
+    const col = before[before.length - 1].length + 1;
+    return `Invalid JSON — line ${line}, column ${col}`;
+  }
+  // Firefox: "JSON.parse: ... at line 3 column 1 of the JSON data"
+  const lineColMatch = e.message.match(/at line (\d+) column (\d+)/);
+  if (lineColMatch) {
+    return `Invalid JSON — line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+  }
+  return `Invalid JSON: ${e.message}`;
+}
+
 const ConfigScreen = () => {
   const [parameters, setParameters] = useState<AppInstallationParameters>({});
+  const [customizationsError, setCustomizationsError] = useState<string | null>(null);
   const sdk = useSDK<ConfigAppSDK>();
 
   const onConfigure = useCallback(async () => {
@@ -82,6 +101,41 @@ const ConfigScreen = () => {
           )}
         </FormControl>
 
+        <FormControl isRequired isInvalid={!parameters.cdaToken}>
+          <FormControl.Label>Content Delivery API Token</FormControl.Label>
+          <TextInput
+            value={parameters.cdaToken ?? ''}
+            name="cdaToken"
+            type="password"
+            onChange={updateParam('cdaToken')}
+          />
+          <FormControl.HelpText>
+            Contentful Content Delivery API access token. Used by the App Action to read
+            published entries when sending to Apple News — the CDA guarantees only published
+            content is returned, so draft changes never leak into articles.
+          </FormControl.HelpText>
+          {!parameters.cdaToken && (
+            <FormControl.ValidationMessage>Required.</FormControl.ValidationMessage>
+          )}
+        </FormControl>
+
+        <FormControl isRequired isInvalid={!parameters.cpaToken}>
+          <FormControl.Label>Content Preview API Token</FormControl.Label>
+          <TextInput
+            value={parameters.cpaToken ?? ''}
+            name="cpaToken"
+            type="password"
+            onChange={updateParam('cpaToken')}
+          />
+          <FormControl.HelpText>
+            Contentful Content Preview API token. Used by the browser download-preview
+            to read draft content so editors can inspect unpublished changes before publishing.
+          </FormControl.HelpText>
+          {!parameters.cpaToken && (
+            <FormControl.ValidationMessage>Required.</FormControl.ValidationMessage>
+          )}
+        </FormControl>
+
         <FormControl>
           <FormControl.Label>Canonical URL Template</FormControl.Label>
           <TextInput
@@ -124,19 +178,33 @@ const ConfigScreen = () => {
           </FormControl.HelpText>
         </FormControl>
 
-        <FormControl>
+        <FormControl isInvalid={customizationsError !== null}>
           <FormControl.Label>Article Customizations (JSON)</FormControl.Label>
           <Textarea
             value={parameters.articleCustomizationsJson ?? ''}
             name="articleCustomizationsJson"
             rows={8}
-            onChange={updateParam('articleCustomizationsJson')}
+            onChange={e => {
+              updateParam('articleCustomizationsJson')(e);
+              if (customizationsError) {
+                try { JSON.parse(e.target.value); setCustomizationsError(null); } catch { /* still invalid */ }
+              }
+            }}
+            onBlur={e => {
+              const value = e.target.value.trim();
+              if (!value) { setCustomizationsError(null); return; }
+              try { JSON.parse(value); setCustomizationsError(null); }
+              catch (err) { setCustomizationsError(parseJsonError(value, err as SyntaxError)); }
+            }}
             placeholder='{"componentStyles":{"titleStyle":{"textColor":"#FF1330"}}}'
           />
           <FormControl.HelpText>
             JSON object deep-merged over the generated article document. Use this to
             override styles, layouts, or typography without modifying code.
           </FormControl.HelpText>
+          {customizationsError && (
+            <FormControl.ValidationMessage>{customizationsError}</FormControl.ValidationMessage>
+          )}
         </FormControl>
       </Form>
     </Flex>

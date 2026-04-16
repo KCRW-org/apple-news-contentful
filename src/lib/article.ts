@@ -1,66 +1,7 @@
 import type { AnfComponent, AnfDocument, AppInstallationParameters, ResolvedStory } from '../types';
 import { richTextToComponents } from './richText';
-
-// ── Article base (mirrored from kcrw.plone_apple_news/templates.py) ──────────
-
-const ARTICLE_BASE = {
-  version: '1.7',
-  layout: { columns: 12, width: 1280, margin: 60, gutter: 20 },
-  documentStyle: { backgroundColor: '#FFFFFF' },
-  textStyles: {
-    'class-style-discreet': { textColor: '#86868B', fontSize: 14 },
-    'style-underline': { underline: true },
-  },
-  componentTextStyles: {
-    default: { fontName: 'Helvetica', fontSize: 18, lineHeight: 25, linkStyle: { textColor: '#1D1D1F' } },
-    'default-title': { fontSize: 45, lineHeight: 48, fontName: 'Verdana-Bold', hyphenation: false },
-    'default-intro': { fontSize: 20 },
-    'default-byline': { fontSize: 14, hyphenation: false, textColor: '#86868B' },
-    'default-body': { hyphenation: true, paragraphSpacingAfter: 18, paragraphSpacingBefore: 18 },
-    'default-caption': { fontSize: 14, textAlignment: 'center', textColor: '#86868B' },
-    'body-container': {},
-    'body-section': {},
-    'body-section-first': {},
-    'body-section-last': {},
-    'footer-section': {},
-    'footer-section-first': {},
-    'footer-section-last': {},
-  },
-  componentStyles: {
-    headerStyle: {}, titleStyle: {}, subheadStyle: {}, bylineStyle: {},
-    leadPhotoContainerStyle: {}, leadPhotoStyle: {}, leadPhotoCaptionStyle: {},
-    bodyStyle: {}, bodyHeadingStyle: {}, bodyHeadingWithBorderStyle: {},
-    bodyPhotoStyle: {}, bodyPhotoInsetStyle: {}, bodyPhotoContainerStyle: {},
-    captionStyle: {}, bodyImageStyle: {}, bodyVideoEmbedStyle: {},
-    headerAudioStyle: {}, headerVideoStyle: {}, bodyAudioEmbedStyle: {},
-    footerStyle: {},
-  },
-  componentLayouts: {
-    headerLayout: { margin: { top: 20, bottom: 20 } },
-    titleLayout: {},
-    subheadLayout: { margin: { top: 5 } },
-    bylineLayout: {},
-    leadPhotoContainer: { ignoreViewportPadding: true, ignoreDocumentMargin: true, margin: { bottom: 10 } },
-    leadPhoto: { ignoreViewportPadding: true, ignoreDocumentMargin: true },
-    leadPhotoCaptionLayout: { ignoreViewportPadding: true, ignoreDocumentMargin: true, margin: { top: 2, bottom: 2 } },
-    bodyLayout: { margin: { top: 20, bottom: 40 } },
-    imageLeft: { columnStart: 0, columnSpan: 4, padding: { top: 0, right: 5, bottom: 10, left: 0 } },
-    imageRight: { columnStart: 8, columnSpan: 4, padding: { top: 0, right: 0, bottom: 10, left: 5 } },
-    bodyHeading: { margin: { top: 10, bottom: 10 } },
-    bodyPhoto: { columnStart: 1, columnSpan: 10, margin: { top: 20, bottom: 20 } },
-    captionLayout: { padding: { top: 2, bottom: 2 } },
-    bodyImage: {},
-    bodyVideoEmbed: { margin: { top: 20, bottom: 20 } },
-    headerAudioLayout: { margin: { top: 20, bottom: 20 } },
-    headerVideoLayout: { margin: { top: 20, bottom: 20 } },
-    bodyAudioEmbed: { margin: { top: 20, bottom: 20 } },
-    footerLayout: { margin: { top: 10, bottom: 40 } },
-  },
-  metadata: {
-    generatorName: 'Apple News Contentful',
-    generatorVersion: '0.1.0',
-  },
-};
+import { formatByline, authorNames, renderAfterBody, ARTICLE_BASE } from './conventions';
+import { mergeDeep, stripMarkdown } from './utilities';
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +17,13 @@ export function buildArticle(
   const base = mergeDeep({}, ARTICLE_BASE as unknown as Record<string, unknown>) as typeof ARTICLE_BASE;
   const components: AnfComponent[] = buildComponents(story, params);
 
+  const metadata: Record<string, unknown> = { ...((base.metadata ?? {}) as object) };
+  if (story.description) metadata.excerpt = stripMarkdown(story.description);
+  if (story.thumbnailUrl) metadata.thumbnailURL = story.thumbnailUrl;
+  if (story.canonicalUrl) metadata.canonicalURL = story.canonicalUrl;
+  const authors = authorNames(story.people, story.bylineCount);
+  if (authors.length > 0) metadata.authors = authors;
+
   let doc: AnfDocument = {
     ...base,
     version: ARTICLE_BASE.version,
@@ -83,6 +31,7 @@ export function buildArticle(
     title: story.title,
     language: 'en-US',
     components,
+    metadata,
   };
 
   // Apply articleCustomizationsJson deep-merge
@@ -101,18 +50,47 @@ export function buildArticle(
 function buildComponents(story: ResolvedStory, params: AppInstallationParameters): AnfComponent[] {
   const components: AnfComponent[] = [];
 
-  // 1. Header container: title → intro → byline
+  // 1. Header container: show title (eyebrow) → title → intro → byline.
+  // The show title is pre-uppercased here so styling has to actively undo it rather than
+  // having to apply textTransform that a customization could inadvertently override.
   const headerChildren: AnfComponent[] = [];
-  headerChildren.push({ role: 'title', text: story.title, layout: 'titleLayout', style: 'titleStyle' });
-  if (story.description) {
-    headerChildren.push({ role: 'intro', text: story.description, layout: 'subheadLayout', style: 'subheadStyle' });
+  if (story.showTitle) {
+    headerChildren.push({
+      role: 'body',
+      text: story.showTitle,
+      layout: 'showTitleLayout',
+      style: 'showTitleStyle',
+      textStyle: 'default-show-title',
+    });
   }
-  if (story.byline) {
-    headerChildren.push({ role: 'body', text: story.byline, layout: 'bylineLayout', style: 'bylineStyle' });
+  headerChildren.push({ role: 'title', text: story.title, layout: 'titleLayout', style: 'titleStyle' });
+  const bylineText = formatByline(story.people, story.bylineDate, story.categoryTitle, story.bylineCount);
+  if (bylineText) {
+    headerChildren.push({ role: 'byline', text: bylineText, layout: 'bylineLayout', style: 'bylineStyle' });
   }
   components.push({ role: 'container', layout: 'headerLayout', style: 'headerStyle', components: headerChildren });
 
-  // 2. Lead photo (with optional caption container)
+  // 2. Top-level audio (if present) — before lead image so the player sits close to the byline.
+  if (story.audio) {
+    components.push({
+      role: 'audio',
+      audioURL: story.audio.url,
+      layout: 'headerAudioLayout',
+      style: 'headerAudioStyle',
+    });
+  }
+
+  // 3. Top-level video (if present)
+  if (story.video) {
+    components.push({
+      role: 'embedwebvideo',
+      URL: story.video.url,
+      layout: 'headerVideoLayout',
+      style: 'headerVideoStyle',
+    });
+  }
+
+  // 4. Lead photo (with optional caption container)
   if (story.leadImage) {
     const photoComponent: AnfComponent = {
       role: 'photo',
@@ -130,7 +108,7 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
         style: 'leadPhotoContainerStyle',
         components: [
           photoComponent,
-          { role: 'caption', text: captionText, layout: 'leadPhotoCaptionLayout', style: 'leadPhotoCaptionStyle' },
+          { role: 'caption', text: captionText, layout: 'leadPhotoCaptionLayout', style: 'leadPhotoCaptionStyle', textStyle: 'default-caption' },
         ],
       };
       components.push(captionContainer);
@@ -141,43 +119,14 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
     }
   }
 
-  // 3. Top-level audio (if present)
-  if (story.audio) {
-    components.push({
-      role: 'audio',
-      audioURL: story.audio.url,
-      layout: 'headerAudioLayout',
-      style: 'headerAudioStyle',
-    });
-  }
-
-  // 4. Top-level video (if present)
-  if (story.video) {
-    components.push({
-      role: 'embedwebvideo',
-      URL: story.video.url,
-      layout: 'headerVideoLayout',
-      style: 'headerVideoStyle',
-    });
-  }
-
   // 5. Body section (rich text)
   if (story.body) {
     const bodyComponents = richTextToComponents(story.body, story.embedMap, story.linkMap);
     components.push(...bodyComponents);
   }
 
-  // 6. Corrections section (after body)
-  if (story.corrections) {
-    components.push({
-      role: 'body',
-      identifier: 'corrections',
-      text: `<p><strong>Correction:</strong> ${escapeHtml(story.corrections)}</p>`,
-      format: 'html',
-      layout: 'bodyLayout',
-      style: 'bodyStyle',
-    });
-  }
+  // 6. After-body content (credits, corrections; hook for future additions).
+  components.push(...renderAfterBody({ story, canonicalUrlTemplate: params.canonicalUrlTemplate ?? '' }));
 
   // 7. Footer
   if (params.footerText) {
@@ -190,37 +139,4 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
   }
 
   return components;
-}
-
-/**
- * Recursively deep-merges `source` into `target`.
- * Arrays in `source` replace arrays in `target` (no concatenation).
- * Exported for testing.
- */
-export function mergeDeep(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const sv = source[key];
-    const tv = result[key];
-    if (
-      sv !== null &&
-      typeof sv === 'object' &&
-      !Array.isArray(sv) &&
-      tv !== null &&
-      typeof tv === 'object' &&
-      !Array.isArray(tv)
-    ) {
-      result[key] = mergeDeep(tv as Record<string, unknown>, sv as Record<string, unknown>);
-    } else {
-      result[key] = sv;
-    }
-  }
-  return result;
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

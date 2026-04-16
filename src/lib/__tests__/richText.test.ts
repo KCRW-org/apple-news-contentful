@@ -74,8 +74,8 @@ describe('richTextToComponents', () => {
     expect(components[0].URL).toBe('https://www.youtube.com/watch?v=abc');
   });
 
-  it('renders soundstack mediaLink as audio', () => {
-    const audioEmbed: ResolvedEmbed = { type: 'soundstack', url: 'https://audio.example.com/ep.mp3' };
+  it('renders audio mediaLink as audio', () => {
+    const audioEmbed: ResolvedEmbed = { type: 'audio', url: 'https://audio.example.com/ep.mp3' };
     const embedMap = new Map([['au1', audioEmbed]]);
     const doc = makeDoc(embeddedEntry('au1'));
     const components = richTextToComponents(doc, embedMap, new Map());
@@ -84,7 +84,7 @@ describe('richTextToComponents', () => {
     expect(components[0].audioURL).toBe('https://audio.example.com/ep.mp3');
   });
 
-  it('skips unknown embedded entries', () => {
+  it('omits unresolved block embeds entirely (Apple News rejects paragraphs with no text content)', () => {
     const doc = makeDoc(embeddedEntry('unknown-id'));
     const components = richTextToComponents(doc, new Map(), new Map());
     expect(components).toHaveLength(0);
@@ -163,5 +163,116 @@ describe('nodeToHtml', () => {
     };
     const html = nodeToHtml(node as any, new Map());
     expect(html).toContain('<a href="https://example.com">Link</a>');
+  });
+});
+
+describe('richTextToComponents — unavailable linked content', () => {
+  it('drops an entry hyperlink whose target is missing from linkMap, keeping the inner text', () => {
+    const doc: Document = {
+      nodeType: BLOCKS.DOCUMENT,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.PARAGRAPH,
+        data: {},
+        content: [
+          { nodeType: 'text', value: 'See ', marks: [], data: {} },
+          {
+            nodeType: INLINES.ENTRY_HYPERLINK,
+            data: { target: { sys: { id: 'deleted-entry' } } },
+            content: [{ nodeType: 'text', value: 'this story', marks: [], data: {} }],
+          } as any,
+          { nodeType: 'text', value: '.', marks: [], data: {} },
+        ],
+      }],
+    };
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(1);
+    const html = (components[0] as any).text as string;
+    expect(html).not.toContain('<a ');
+    expect(html).toContain('See this story.');
+  });
+
+  it('drops an entry hyperlink whose linkMap entry is explicitly null', () => {
+    const doc: Document = {
+      nodeType: BLOCKS.DOCUMENT,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.PARAGRAPH,
+        data: {},
+        content: [{
+          nodeType: INLINES.ENTRY_HYPERLINK,
+          data: { target: { sys: { id: 'broken' } } },
+          content: [{ nodeType: 'text', value: 'text', marks: [], data: {} }],
+        } as any],
+      }],
+    };
+    const linkMap = new Map<string, string | null>([['broken', null]]);
+    const components = richTextToComponents(doc, new Map(), linkMap);
+    const html = (components[0] as any).text as string;
+    expect(html).not.toContain('<a ');
+    expect(html).toContain('text');
+  });
+
+  it('omits an unavailable block embed between text paragraphs; adjacent text batches split around the gap', () => {
+    const doc: Document = {
+      nodeType: BLOCKS.DOCUMENT,
+      data: {},
+      content: [
+        {
+          nodeType: BLOCKS.PARAGRAPH,
+          data: {},
+          content: [{ nodeType: 'text', value: 'Before.', marks: [], data: {} }],
+        },
+        {
+          nodeType: BLOCKS.EMBEDDED_ENTRY,
+          data: { target: { sys: { id: 'deleted-photo' } } },
+          content: [],
+        } as any,
+        {
+          nodeType: BLOCKS.PARAGRAPH,
+          data: {},
+          content: [{ nodeType: 'text', value: 'After.', marks: [], data: {} }],
+        },
+      ],
+    };
+    // embedMap is empty — the embedded entry could not be resolved.
+    const components = richTextToComponents(doc, new Map(), new Map());
+    // Since we skip the unresolved embed without inserting a placeholder, the two
+    // text blocks flow into a single batch (nothing separates them after filtering).
+    expect(components).toHaveLength(1);
+    expect((components[0] as any).text).toBe('<p>Before.</p><p>After.</p>');
+  });
+
+  it('still emits resolved embeds when adjacent to a broken one', () => {
+    const doc: Document = {
+      nodeType: BLOCKS.DOCUMENT,
+      data: {},
+      content: [
+        {
+          nodeType: BLOCKS.PARAGRAPH,
+          data: {},
+          content: [{ nodeType: 'text', value: 'Intro.', marks: [], data: {} }],
+        },
+        {
+          nodeType: BLOCKS.EMBEDDED_ENTRY,
+          data: { target: { sys: { id: 'missing' } } },
+          content: [],
+        } as any,
+        {
+          nodeType: BLOCKS.EMBEDDED_ENTRY,
+          data: { target: { sys: { id: 'good-photo' } } },
+          content: [],
+        } as any,
+      ],
+    };
+    const embedMap = new Map<string, ResolvedEmbed>([
+      ['good-photo', { type: 'photo', url: 'https://img.example.com/a.jpg' }],
+    ]);
+    const components = richTextToComponents(doc, embedMap, new Map());
+    expect(components).toHaveLength(2);
+    expect((components[0] as any).role).toBe('body');
+    expect((components[0] as any).text).toBe('<p>Intro.</p>');
+    expect((components[1] as any).role).toBe('photo');
+    expect((components[1] as any).URL).toBe('https://img.example.com/a.jpg');
   });
 });

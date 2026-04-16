@@ -1,4 +1,5 @@
-import { createClient } from 'contentful-management';
+import contentfulManagement from 'contentful-management';
+const { createClient } = contentfulManagement;
 import { organizationId, appDefinitionId, accessToken, contentfulHost, manifest } from './imports';
 
 const host = contentfulHost || 'api.contentful.com';
@@ -29,6 +30,13 @@ const main = async () => {
           id: 'action',
           name: 'Action',
           description: "Optional action: 'checkStatus' or 'delete'. Omit for publish/update.",
+          type: 'Symbol',
+          required: false,
+        },
+        {
+          id: 'options',
+          name: 'Options',
+          description: 'JSON-encoded publish options (isPreview, isCandidateToBeFeatured, isSponsored).',
           type: 'Symbol',
           required: false,
         },

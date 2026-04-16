@@ -9,7 +9,13 @@
       "path": "functions/index.js",
       "entryFile": "functions/index.ts",
       "allowNetworks": ["https://news-api.apple.com"],
-      "accepts": ["appaction.call"]
+      "accepts": ["appaction.call", "appevent.handler"]
     }
-  ]
+  ],
+  "events": {
+    "Entry": {
+      "unpublish": { "handler": "appleNewsFunction" },
+      "archive": { "handler": "appleNewsFunction" }
+    }
+  }
 }

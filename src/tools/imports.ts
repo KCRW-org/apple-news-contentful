@@ -13,6 +13,8 @@ const {
   CONTENTFUL_HOST: contentfulHost = '',
   CONTENTFUL_SPACE_ID: spaceId = '',
   CONTENTFUL_ENVIRONMENT_ID: environmentId = 'master',
+  CONTENTFUL_CPA_TOKEN: cpaToken = '',
+  CONTENTFUL_CDA_TOKEN: cdaToken = '',
 } = process.env;
 
 assert.ok(organizationId !== '', 'CONTENTFUL_ORG_ID must be set');
@@ -26,5 +28,7 @@ export {
   contentfulHost,
   spaceId,
   environmentId,
+  cpaToken,
+  cdaToken,
   manifest,
 };

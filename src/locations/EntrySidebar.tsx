@@ -1,202 +1,128 @@
-import React, { useState, useEffect } from 'react';
 import { SidebarAppSDK } from '@contentful/app-sdk';
-import {
-  Button,
-  Flex,
-  Note,
-  Spinner,
-  Text,
-} from '@contentful/f36-components';
+import { Button, Flex, Note, Spinner, Text } from '@contentful/f36-components';
 import { useSDK, useAutoResizer } from '@contentful/react-apps-toolkit';
-import type { PublishActionResult, CheckStatusResult, DeleteActionResult } from '../types';
-
-type PublishState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'success'; shareUrl: string }
-  | { status: 'error'; error: string };
-
-type DeleteState =
-  | { status: 'idle' }
-  | { status: 'confirming' }
-  | { status: 'loading' }
-  | { status: 'success' }
-  | { status: 'error'; error: string };
-
-type AppleNewsStatus = 'checking' | 'published' | 'unpublished' | 'unknown';
+import { useAppleNews } from './useAppleNews';
+import { APPLE_NEWS_STATE_LABELS } from '../types';
 
 const EntrySidebar = () => {
   const sdk = useSDK<SidebarAppSDK>();
-  const cma = sdk.cma;
-  const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
-  const [deleteState, setDeleteState] = useState<DeleteState>({ status: 'idle' });
-  const [appleNewsStatus, setAppleNewsStatus] = useState<AppleNewsStatus>('checking');
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [entrySys, setEntrySys] = useState(() => sdk.entry.getSys());
-
   useAutoResizer();
 
-  useEffect(() => {
-    return sdk.entry.onSysChanged(setEntrySys);
-  }, [sdk.entry]);
+  const {
+    publishState,
+    deleteState,
+    appleNewsStatus,
+    isPublishedInContentful,
+    isBusy,
+    hasPendingChanges,
+    needsUpdate,
+    canPublish,
+    handlePublish,
+    handleDelete,
+    requestDelete,
+    cancelDelete,
+  } = useAppleNews(sdk);
 
-  // Check current Apple News status on mount
-  useEffect(() => {
-    cma.appActionCall
-      .createWithResponse(
-        {
-          spaceId: sdk.ids.space,
-          environmentId: sdk.ids.environment,
-          appDefinitionId: sdk.ids.app ?? '',
-          appActionId: 'publishToAppleNews',
-        },
-        { parameters: { action: 'checkStatus', entryId: sdk.ids.entry } },
-      )
-      .then(result => {
-        const body = JSON.parse(result.response.body) as CheckStatusResult;
-        setAppleNewsStatus(body.published ? 'published' : 'unpublished');
-        if (body.shareUrl) setShareUrl(body.shareUrl);
-      })
-      .catch(() => setAppleNewsStatus('unknown'));
-  }, [sdk.ids, cma]);
-
-  const isPublishedInContentful = entrySys.publishedVersion != null;
-  const isBusy = publishState.status === 'loading' || deleteState.status === 'loading';
+  const isPublished = appleNewsStatus.status === 'published';
+  const isPreviewArticle = isPublished && appleNewsStatus.data.isPreview;
+  const isLiveArticle = isPublished && !isPreviewArticle;
+  const actionsDisabled = isBusy || !isPublishedInContentful || hasPendingChanges || appleNewsStatus.status === 'checking';
+  const publishDisabled = actionsDisabled || (isLiveArticle && !needsUpdate);
 
   const publishButtonLabel =
-    appleNewsStatus === 'checking' ? (
+    appleNewsStatus.status === 'checking' ? (
       <Flex alignItems="center" gap="spacingXs">
         <Spinner size="small" />
-        <Text>Checking Apple News status…</Text>
+        <Text>Checking…</Text>
       </Flex>
-    ) : appleNewsStatus === 'published' ? (
-      'Update in Apple News'
+    ) : isPublished && !isPreviewArticle ? (
+      'Update Apple News Article'
     ) : (
       'Publish to Apple News'
     );
 
-  const handlePublish = async () => {
-    setDeleteState({ status: 'idle' });
-    setPublishState({ status: 'loading' });
-    try {
-      const result = await cma.appActionCall.createWithResponse(
-        {
-          spaceId: sdk.ids.space,
-          environmentId: sdk.ids.environment,
-          appDefinitionId: sdk.ids.app ?? '',
-          appActionId: 'publishToAppleNews',
-        },
-        { parameters: { entryId: sdk.ids.entry } },
-      );
-      const body = JSON.parse(result.response.body) as PublishActionResult;
-      if (body.success && body.shareUrl) {
-        setPublishState({ status: 'success', shareUrl: body.shareUrl });
-        setShareUrl(body.shareUrl);
-        setAppleNewsStatus('published');
-      } else {
-        setPublishState({ status: 'error', error: body.error ?? 'Unknown error publishing to Apple News' });
-      }
-    } catch (err: unknown) {
-      setPublishState({ status: 'error', error: err instanceof Error ? err.message : String(err) });
-    }
-  };
-
-  const handleDelete = async () => {
-    setPublishState({ status: 'idle' });
-    setDeleteState({ status: 'loading' });
-    try {
-      const result = await cma.appActionCall.createWithResponse(
-        {
-          spaceId: sdk.ids.space,
-          environmentId: sdk.ids.environment,
-          appDefinitionId: sdk.ids.app ?? '',
-          appActionId: 'publishToAppleNews',
-        },
-        { parameters: { action: 'delete', entryId: sdk.ids.entry } },
-      );
-      const body = JSON.parse(result.response.body) as DeleteActionResult;
-      if (body.success) {
-        setDeleteState({ status: 'success' });
-        setShareUrl(null);
-        setAppleNewsStatus('unpublished');
-      } else {
-        setDeleteState({ status: 'error', error: body.error ?? 'Unknown error removing from Apple News' });
-      }
-    } catch (err: unknown) {
-      setDeleteState({ status: 'error', error: err instanceof Error ? err.message : String(err) });
-    }
-  };
-
   return (
     <Flex flexDirection="column" gap="spacingS" style={{ wordBreak: 'break-word' }}>
-      {!isPublishedInContentful && (
-        <Note variant="warning">
-          Entry must be published in Contentful before sending to Apple News.
+      {/* Status */}
+      {isPublished && publishState.status === 'idle' && (
+        <Note variant={isPreviewArticle ? 'warning' : 'positive'} style={{ fontSize: '12px' }}>
+          <Flex flexDirection="column" gap="spacingXs">
+            <Text fontSize="fontSizeS" fontWeight="fontWeightDemiBold">
+              {isPreviewArticle ? 'Apple Preview' : 'Live on Apple News'}
+            </Text>
+            {appleNewsStatus.data.state === 'FAILED_PROCESSING' || appleNewsStatus.data.state === 'FAILED_PROCESSING_UPDATE' ? (
+              <Text fontSize="fontSizeS" fontColor="red600">{APPLE_NEWS_STATE_LABELS[appleNewsStatus.data.state]}</Text>
+            ) : null}
+            {needsUpdate && (
+              <Text fontSize="fontSizeS" fontColor="gray600">
+                Entry has been updated — consider re-sending to Apple News.
+              </Text>
+            )}
+            <Text fontSize="fontSizeS">
+              <a href={appleNewsStatus.data.shareUrl} target="_blank" rel="noreferrer">
+                {isPreviewArticle ? 'Preview link ↗' : 'View article ↗'}
+              </a>
+            </Text>
+          </Flex>
         </Note>
       )}
 
-      <Button
-        variant="primary"
-        onClick={handlePublish}
-        isDisabled={isBusy || !isPublishedInContentful || appleNewsStatus === 'checking'}
-        isFullWidth
-      >
-        {publishState.status === 'loading' ? (
-          <Flex alignItems="center" gap="spacingXs">
-            <Spinner size="small" />
-            <Text>{appleNewsStatus === 'published' ? 'Updating…' : 'Publishing…'}</Text>
-          </Flex>
-        ) : (
-          publishButtonLabel
-        )}
-      </Button>
-
       {publishState.status === 'success' && (
-        <Note variant="positive" title="Published to Apple News">
-          <Text>
-            <a href={publishState.shareUrl} target="_blank" rel="noreferrer">
-              View in Apple News
-            </a>
+        <Note variant="positive">
+          <Text fontSize="fontSizeS">
+            {publishState.isPreview ? 'Preview updated — ' : 'Published — '}
+            <a href={publishState.shareUrl} target="_blank" rel="noreferrer">view ↗</a>
           </Text>
         </Note>
       )}
 
       {publishState.status === 'error' && (
-        <Note variant="negative" title="Publish failed">
-          <Text>{publishState.error}</Text>
+        <Note variant="negative">
+          <Text fontSize="fontSizeS">{publishState.error}</Text>
         </Note>
       )}
 
-      {appleNewsStatus === 'published' && shareUrl && publishState.status === 'idle' && (
-        <Note variant="neutral">
-          <Text>
-            Published:{' '}
-            <a href={shareUrl} target="_blank" rel="noreferrer">
-              View in Apple News
-            </a>
-          </Text>
+      {isPublishedInContentful && hasPendingChanges && (
+        <Note variant="warning">
+          <Text fontSize="fontSizeS">Unpublished changes — publish in Contentful before sending to Apple News.</Text>
         </Note>
       )}
 
-      {appleNewsStatus === 'published' && deleteState.status === 'confirming' ? (
+      {/* Publish button */}
+      {canPublish && (
+        <Button
+          variant="positive"
+          onClick={() => handlePublish()}
+          isDisabled={publishDisabled}
+          isFullWidth
+          size="small"
+        >
+          {publishState.status === 'loading' && !publishState.isPreview ? (
+            <Flex alignItems="center" gap="spacingXs">
+              <Spinner size="small" />
+              <Text>{isPublished ? 'Updating…' : 'Publishing…'}</Text>
+            </Flex>
+          ) : (
+            publishButtonLabel
+          )}
+        </Button>
+      )}
+
+      {/* Delete */}
+      {isPublished && deleteState.status === 'confirming' ? (
         <Flex flexDirection="column" gap="spacingXs">
-          <Text fontColor="gray700" fontSize="fontSizeS">
-            Remove this story from Apple News?
-          </Text>
-          <Flex gap="spacingXs">
-            <Button variant="negative" size="small" onClick={handleDelete} isFullWidth>
-              Delete
-            </Button>
-            <Button variant="secondary" size="small" onClick={() => setDeleteState({ status: 'idle' })} isFullWidth>
-              Cancel
-            </Button>
+          <Text fontColor="gray700" fontSize="fontSizeS">Remove from Apple News?</Text>
+          <Flex gap="spacingXs" style={{ flexWrap: 'nowrap' }}>
+            <Button variant="negative" size="small" onClick={handleDelete} style={{ flex: 1 }}>Remove</Button>
+            <Button variant="secondary" size="small" onClick={cancelDelete} style={{ flex: 1 }}>Cancel</Button>
           </Flex>
         </Flex>
-      ) : appleNewsStatus === 'published' ? (
+      ) : isPublished ? (
         <Button
-          variant="negative"
-          onClick={() => setDeleteState({ status: 'confirming' })}
-          isDisabled={isBusy || deleteState.status === 'success'}
+          variant="secondary"
+          size="small"
+          onClick={requestDelete}
+          isDisabled={isBusy}
           isFullWidth
         >
           {deleteState.status === 'loading' ? (
@@ -210,15 +136,9 @@ const EntrySidebar = () => {
         </Button>
       ) : null}
 
-      {deleteState.status === 'success' && (
-        <Note variant="positive" title="Removed from Apple News">
-          <Text>The story has been removed from Apple News.</Text>
-        </Note>
-      )}
-
       {deleteState.status === 'error' && (
-        <Note variant="negative" title="Remove failed">
-          <Text>{deleteState.error}</Text>
+        <Note variant="negative">
+          <Text fontSize="fontSizeS">{deleteState.error}</Text>
         </Note>
       )}
     </Flex>

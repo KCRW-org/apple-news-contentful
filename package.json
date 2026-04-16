@@ -2,6 +2,7 @@
   "name": "apple-news-contentful",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@contentful/app-sdk": "^4.22.0",
     "@contentful/f36-components": "4.45.0",
@@ -11,6 +12,8 @@
     "@contentful/rich-text-types": "^17.1.6",
     "contentful-management": "^11.27.0",
     "emotion": "10.0.27",
+    "jszip": "^3.10.1",
+    "luxon": "^3.7.2",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
@@ -34,17 +37,27 @@
     "create-app-action:dev": "dotenv -e .env.development -- cross-env CONTENTFUL_HOST=api.contentful.com tsx ./src/tools/create-app-action.ts",
     "preview-article": "tsx -r dotenv/config ./src/tools/preview-article.ts",
     "preview-article:dev": "dotenv -e .env.development -- tsx ./src/tools/preview-article.ts",
+    "update-docs": "tsx ./scripts/update-docs.ts",
     "prepare": "husky"
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   },
   "devDependencies": {
     "@contentful/app-scripts": "^2.3.0",
     "@contentful/node-apps-toolkit": "^3.13.0",
     "@tsconfig/create-react-app": "2.0.0",
     "@tsconfig/recommended": "^1.0.3",
+    "@types/luxon": "^3.7.1",
     "@types/node": "^22.13.10",
     "@types/react": "18.2.14",
     "@types/react-dom": "18.2.6",
@@ -57,7 +70,7 @@
     "prettier": "3.2.5",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.4"
   },
   "homepage": "."
 }

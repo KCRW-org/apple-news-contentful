@@ -1,18 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { buildArticle, mergeDeep } from '../article';
+import { buildArticle } from '../article';
+import { mergeDeep, stripMarkdown } from '../utilities';
 import type { ResolvedStory, AppInstallationParameters } from '../../types';
 
 const minimalStory: ResolvedStory = {
   title: 'Test Story',
   description: 'A test description',
-  byline: 'by Jane Doe ｜ Monday, January 1, 2024',
+  showTitle: null,
+  people: { hosts: [], reporters: [], producers: [], guests: [] },
+  bylineDate: '2024-01-01',
+  bylineCount: 1,
+  categoryTitle: null,
   leadImage: null,
+  thumbnailUrl: null,
+  canonicalUrl: null,
   audio: null,
   video: null,
   body: null,
   corrections: null,
   embedMap: new Map(),
   linkMap: new Map(),
+  warnings: [],
 };
 
 const baseParams: AppInstallationParameters = {
@@ -32,16 +40,14 @@ describe('buildArticle', () => {
     expect(Array.isArray(doc.components)).toBe(true);
   });
 
-  it('includes title, intro (description), and byline components', () => {
-    const doc = buildArticle('entry1', minimalStory, baseParams);
-    // title, intro, and byline are nested inside a header container
+  it('includes title and byline in the header container', () => {
+    const doc = buildArticle('entry1', { ...minimalStory, bylineDate: '2024-01-01', people: { hosts: [{ id: 'h1', name: 'Host One', title: null, slug: null }], reporters: [], producers: [], guests: [] } }, baseParams);
     const headerContainer = doc.components.find(c => c.role === 'container' && c.layout === 'headerLayout');
     expect(headerContainer).toBeDefined();
     const children = (headerContainer as any).components as Array<Record<string, unknown>>;
     const childRoles = children.map((c: any) => c.role);
     expect(childRoles).toContain('title');
-    expect(childRoles).toContain('intro');
-    expect(childRoles).toContain('body'); // byline as body
+    expect(childRoles).toContain('byline');
   });
 
   it('does not include a lead photo when leadImage is null', () => {
@@ -97,5 +103,39 @@ describe('mergeDeep', () => {
   it('source arrays replace target arrays', () => {
     const result = mergeDeep({ arr: [1, 2] }, { arr: [3] });
     expect((result as any).arr).toEqual([3]);
+  });
+});
+
+describe('stripMarkdown', () => {
+  it('removes bold and italic markers', () => {
+    expect(stripMarkdown('**bold** and _italic_')).toBe('bold and italic');
+  });
+
+  it('removes inline code', () => {
+    expect(stripMarkdown('use `code` here')).toBe('use here');
+  });
+
+  it('replaces links with label text', () => {
+    expect(stripMarkdown('[KCRW](https://www.kcrw.com)')).toBe('KCRW');
+  });
+
+  it('removes images', () => {
+    expect(stripMarkdown('before ![alt](img.jpg) after')).toBe('before after');
+  });
+
+  it('removes heading markers', () => {
+    expect(stripMarkdown('## Section Title')).toBe('Section Title');
+  });
+
+  it('removes blockquote markers', () => {
+    expect(stripMarkdown('> quoted text')).toBe('quoted text');
+  });
+
+  it('collapses extra whitespace', () => {
+    expect(stripMarkdown('  lots   of   space  ')).toBe('lots of space');
+  });
+
+  it('returns plain text unchanged', () => {
+    expect(stripMarkdown('Just plain text.')).toBe('Just plain text.');
   });
 });
