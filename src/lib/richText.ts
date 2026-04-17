@@ -99,7 +99,7 @@ export function richTextToComponents(
       const html = item.blocks.map(b => nodeToHtml(b, linkMap)).join('');
       components.push({
         role: 'body',
-        id,
+        identifier: id,
         text: html,
         format: 'html',
         layout: 'bodyLayout',
@@ -158,7 +158,7 @@ function embedToComponent(
       layout: 'bodyPhoto',
       style: 'bodyPhotoStyle',
     };
-    if (anchor) c.anchor = anchor;
+    if (anchor) c.anchor = { targetAnchorPosition: 'top', targetComponentIdentifier: anchor };
     if (embed.altText) c.accessibilityCaption = embed.altText;
     if (embed.caption || embed.credit) {
       c.caption = {
@@ -176,7 +176,7 @@ function embedToComponent(
       layout: 'bodyVideoEmbed',
       style: 'bodyVideoEmbedStyle',
     };
-    if (anchor) c.anchor = anchor;
+    if (anchor) c.anchor = { targetAnchorPosition: 'top', targetComponentIdentifier: anchor };
     return c;
   }
 
@@ -187,7 +187,7 @@ function embedToComponent(
       layout: 'bodyAudioEmbed',
       style: 'bodyAudioEmbedStyle',
     };
-    if (anchor) c.anchor = anchor;
+    if (anchor) c.anchor = { targetAnchorPosition: 'top', targetComponentIdentifier: anchor };
     return c;
   }
 

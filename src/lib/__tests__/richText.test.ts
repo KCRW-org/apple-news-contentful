@@ -27,7 +27,7 @@ describe('richTextToComponents', () => {
     const components = richTextToComponents(doc, new Map(), new Map());
     expect(components).toHaveLength(1);
     expect(components[0].role).toBe('body');
-    expect(components[0].id).toBe('body-section-1');
+    expect(components[0].identifier).toBe('body-section-1');
     expect(components[0].format).toBe('html');
     expect(components[0].text as string).toContain('Hello world');
   });
@@ -37,7 +37,7 @@ describe('richTextToComponents', () => {
     // Consecutive text blocks are batched into one body component
     const components = richTextToComponents(doc, new Map(), new Map());
     expect(components).toHaveLength(1);
-    expect(components[0].id).toBe('body-section-1');
+    expect(components[0].identifier).toBe('body-section-1');
   });
 
   it('inserts photo component between text sections with anchor', () => {
@@ -48,11 +48,11 @@ describe('richTextToComponents', () => {
     // before-text, photo, after-text
     expect(components).toHaveLength(3);
     expect(components[0].role).toBe('body');
-    expect(components[0].id).toBe('body-section-1');
+    expect(components[0].identifier).toBe('body-section-1');
     expect(components[1].role).toBe('photo');
-    expect(components[1].anchor).toBe('body-section-2');
+    expect(components[1].anchor).toEqual({ targetAnchorPosition: 'top', targetComponentIdentifier: 'body-section-2' });
     expect(components[2].role).toBe('body');
-    expect(components[2].id).toBe('body-section-2');
+    expect(components[2].identifier).toBe('body-section-2');
   });
 
   it('does not add anchor to trailing embed (no following text section)', () => {
@@ -374,12 +374,12 @@ describe('richTextToComponents — headings', () => {
     const components = richTextToComponents(doc, new Map(), new Map());
     expect(components).toHaveLength(3);
     expect(components[0].role).toBe('body');
-    expect(components[0].id).toBe('body-section-1');
+    expect(components[0].identifier).toBe('body-section-1');
     expect((components[0].text as string)).toContain('Para 1');
     expect((components[0].text as string)).toContain('Para 2');
     expect(components[1].role).toBe('heading2');
     expect(components[2].role).toBe('body');
-    expect(components[2].id).toBe('body-section-2');
+    expect(components[2].identifier).toBe('body-section-2');
   });
 
   it('renders hyperlinks inside headings', () => {
