@@ -227,14 +227,33 @@ export function useAppleNews(sdk: EntrySDK) {
           return;
         }
         if (body.published && body.data) {
-          const done = !isPending(body.state);
-          setAppleNewsStatus({
-            status: 'published',
-            data: body.data,
-            polling: !done,
-            pollWarnings: body.warnings,
-          });
-          if (done) return;
+          const isTransient = isPending(body.state);
+          const isFailure =
+            body.state === 'FAILED_PROCESSING' ||
+            body.state === 'FAILED_PROCESSING_UPDATE' ||
+            body.state === 'DUPLICATE';
+
+          if (isFailure) {
+            // Terminal bad state — stop polling and surface an error, but preserve stored data.
+            const label = body.state
+              ? (APPLE_NEWS_STATE_LABELS[body.state] ?? body.state)
+              : 'Processing failed';
+            setAppleNewsStatus(prev =>
+              prev.status === 'published' ? { ...prev, polling: false, pollError: label } : prev,
+            );
+            return;
+          }
+
+          if (!isTransient) {
+            // Final good state (LIVE, TAKEN_DOWN, etc.) — update stored data and stop.
+            setAppleNewsStatus({ status: 'published', data: body.data, polling: false, pollWarnings: body.warnings });
+            return;
+          }
+
+          // Transient (PROCESSING / PROCESSING_UPDATE) — keep polling without updating data.
+          setAppleNewsStatus(prev =>
+            prev.status === 'published' ? { ...prev, polling: true } : prev,
+          );
         } else if (!body.published) {
           setAppleNewsStatus({ status: 'unpublished' });
           return;
@@ -251,7 +270,9 @@ export function useAppleNews(sdk: EntrySDK) {
 
       if (Date.now() - startedAt >= POLL_TOTAL_BUDGET_MS) {
         setAppleNewsStatus(prev =>
-          prev.status === 'published' ? { ...prev, polling: false } : prev,
+          prev.status === 'published'
+            ? { ...prev, polling: false, pollError: 'Processing is taking longer than expected. Check Apple News Publisher directly.' }
+            : prev,
         );
         return;
       }

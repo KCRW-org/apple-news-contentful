@@ -18,6 +18,8 @@ import type { ArticleMetadataOptions } from '../src/lib/api';
 
 type CmaContext = { cma: PlainClientAPI; spaceId: string; environmentId: string };
 
+const NON_PERSIST_STATES = new Set(['PROCESSING', 'PROCESSING_UPDATE', 'FAILED_PROCESSING', 'FAILED_PROCESSING_UPDATE', 'DUPLICATE']);
+
 async function getAppleNewsData(
   entryId: string,
   locale: string,
@@ -136,6 +138,8 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
     return { success: false, error: 'Missing entryId in request body' } as PublishActionResult;
   }
 
+  console.log('[appleNews] action=%s entryId=%s', action, entryId);
+
   const params = context.appInstallationParameters as AppInstallationParameters;
   const { apiKeyId, apiKeySecret, channelId } = params;
   const locale = params.locale ?? 'en-US';
@@ -165,8 +169,8 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
 
   // ── refreshStatus ──────────────────────────────────────────────────────────
   // Polls Apple News for the latest article state (PROCESSING → LIVE | FAILED_PROCESSING).
-  // Updates the stored appleNewsData field with the current state + revision so that
-  // subsequent mounts read the latest value without another Apple News round-trip.
+  // Only persists final states (LIVE, TAKEN_DOWN) back to the entry's appleNewsData field;
+  // transient and failure states are returned to the client but not written.
   if (action === 'refreshStatus') {
     if (!apiKeyId || !apiKeySecret || !channelId) {
       return { published: false, error: 'Missing Apple News credentials in app configuration.' } as CheckStatusResult;
@@ -186,10 +190,14 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
         state,
         contentfulVersion: currentPV ?? stored.contentfulVersion,
       };
-      // Only persist when something meaningful changed (state transition, new revision)
-      // to avoid unnecessary version bumps on the entry (+2 per write+publish cycle).
+      // Only persist when the state is a final good state (LIVE, TAKEN_DOWN, etc.).
+      // Transient states (PROCESSING, PROCESSING_UPDATE) and failure/duplicate states
+      // are intentionally not written back — they should not overwrite the last known
+      // good data in the entry, and Apple News may still retry or change them.
       const stateChanged = stored.state !== state || stored.revision !== fresh.revision;
-      if (stateChanged) {
+      const shouldPersist = stateChanged && (!state || !NON_PERSIST_STATES.has(state));
+      console.log('[appleNews] refreshStatus entryId=%s %s → %s persist=%s', entryId, stored.state ?? 'none', state ?? 'none', shouldPersist);
+      if (shouldPersist) {
         try {
           await writeAppleNewsData(entryId, locale, updated, ctx, fieldName);
         } catch (writeErr) {
@@ -225,11 +233,13 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
           const stateChanged = liveState !== data.state;
           const revisionChanged = fresh.revision !== data.revision;
           if (!options.confirmed && (stateChanged || revisionChanged)) {
+            console.log('[appleNews] conflict liveState=%s storedState=%s revisionChanged=%s entryId=%s', liveState, data.state, revisionChanged, entryId);
             return { success: false, conflict: { liveState: liveState!, storedState: data.state, revisionChanged } } as DeleteActionResult;
           }
         } catch (readErr) {
           // 404 means the article was already deleted from Apple News — skip the API delete.
           if (readErr instanceof AppleNewsApiError && readErr.status === 404) {
+            console.log('[appleNews] delete 404-as-success (already deleted) entryId=%s articleId=%s', entryId, data.id);
             await clearAppleNewsData(entryId, locale, ctx, fieldName);
             return { success: true } as DeleteActionResult;
           }
@@ -237,10 +247,12 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
         }
         await deleteArticle(data.id, credentials);
       }
+      console.log('[appleNews] delete ok entryId=%s', entryId);
       await clearAppleNewsData(entryId, locale, ctx, fieldName);
       return { success: true } as DeleteActionResult;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      console.log('[appleNews] error action=delete entryId=%s err=%s', entryId, message);
       return { success: false, error: message } as DeleteActionResult;
     }
   }
@@ -307,6 +319,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
         if (readErr instanceof AppleNewsApiError && readErr.status === 404) {
           // Article was deleted from Apple News directly. Ask the user to confirm a re-publish.
           if (!options.confirmed) {
+            console.log('[appleNews] conflict articleDeleted entryId=%s articleId=%s', entryId, existingData.id);
             return { success: false, conflict: { articleDeleted: true } } as PublishActionResult;
           }
           storedArticleDeleted = true;
@@ -326,6 +339,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
         const stateChanged = liveState !== existingData.state;
         const revisionChanged = freshArticle.revision !== existingData.revision;
         if (!options.confirmed && (stateChanged || revisionChanged)) {
+          console.log('[appleNews] conflict liveState=%s storedState=%s revisionChanged=%s entryId=%s', liveState, existingData.state, revisionChanged, entryId);
           return { success: false, conflict: { liveState: liveState!, storedState: existingData.state, revisionChanged } } as PublishActionResult;
         }
       }
@@ -426,6 +440,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
     };
     await writeAppleNewsData(entryId, locale, data, ctx, fieldName);
 
+    console.log('[appleNews] publish ok articleId=%s state=%s isPreview=%s entryId=%s', data.id, data.state ?? 'none', isPreview, entryId);
     return {
       success: true,
       shareUrl: data.shareUrl,
@@ -434,6 +449,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
     } as PublishActionResult;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.log('[appleNews] error action=publish entryId=%s err=%s', entryId, message);
     return { success: false, error: message } as PublishActionResult;
   }
 };
