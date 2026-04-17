@@ -10,7 +10,7 @@ import type {
   AppInstallationParameters,
 } from '../types';
 import { PENDING_APPLE_NEWS_STATES, APPLE_NEWS_STATE_LABELS } from '../types';
-import { FIELD_NAMES } from '../lib/conventions';
+import { fieldNames } from '../lib/site';
 
 export type PublishState =
   | { status: 'idle' }
@@ -48,7 +48,7 @@ function readStoredAppleNewsData(sdk: EntrySDK): AppleNewsData | null {
   const params = sdk.parameters.installation as AppInstallationParameters;
   const locale = params.locale ?? 'en-US';
   try {
-    const raw = sdk.entry.fields[FIELD_NAMES.appleNewsData]?.getValue(locale);
+    const raw = sdk.entry.fields[fieldNames.appleNewsData]?.getValue(locale);
     if (!raw) return null;
     return (typeof raw === 'string' ? JSON.parse(raw) : raw) as AppleNewsData;
   } catch {
@@ -149,7 +149,7 @@ export function useAppleNews(sdk: EntrySDK) {
         entryId: sdk.ids.entry,
       });
       if (seq !== fetchSeqRef.current) return;
-      const raw = (entry.fields as Record<string, Record<string, unknown>>)[FIELD_NAMES.appleNewsData]?.[locale];
+      const raw = (entry.fields as Record<string, Record<string, unknown>>)[fieldNames.appleNewsData]?.[locale];
       let data: AppleNewsData | null = null;
       if (raw) {
         try {

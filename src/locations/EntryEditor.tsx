@@ -407,7 +407,7 @@ const EntryEditor = () => {
             )}
             {appleNewsStatus.data.contentfulVersion != null && (
               <TableRow>
-                <TableCell><Text fontWeight="fontWeightDemiBold">Contentful Version at Last Send</Text></TableCell>
+                <TableCell><Text fontWeight="fontWeightDemiBold">Last uploaded Contentful version</Text></TableCell>
                 <TableCell><Text>{appleNewsStatus.data.contentfulVersion}</Text></TableCell>
               </TableRow>
             )}

@@ -13,7 +13,7 @@ import { createArticle, readArticle, updateArticle, deleteArticle, AppleNewsApiE
 import { resolveStory } from '../src/lib/fetch';
 import { createDeliveryEntrySource } from '../src/lib/entrySource';
 import { buildArticle } from '../src/lib/article';
-import { FIELD_NAMES, resolveArticleMetadata } from '../src/lib/conventions';
+import { fieldNames, siteConfig } from '../src/lib/site';
 import type { ArticleMetadataOptions } from '../src/lib/api';
 
 type CmaContext = { cma: PlainClientAPI; spaceId: string; environmentId: string };
@@ -151,7 +151,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
   const params = context.appInstallationParameters as AppInstallationParameters;
   const { apiKeyId, apiKeySecret, channelId } = params;
   const locale = params.locale ?? 'en-US';
-  const fieldName = FIELD_NAMES.appleNewsData;
+  const fieldName = fieldNames.appleNewsData;
 
   const { spaceId, environmentId, cma } = context;
   if (!cma) {
@@ -305,7 +305,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       return { success: false, error: 'Entry has unpublished changes. Publish all changes in Contentful before sending to Apple News.' } as PublishActionResult;
     }
 
-    const rawTitle = (entryForCheck.fields as Record<string, Record<string, unknown>>)[FIELD_NAMES.title]?.[locale];
+    const rawTitle = (entryForCheck.fields as Record<string, Record<string, unknown>>)[fieldNames.title]?.[locale];
     if (!rawTitle) {
       return { success: false, error: 'Entry title is empty. Set a title in Contentful before sending to Apple News.' } as PublishActionResult;
     }
@@ -362,7 +362,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
 
     const articleJson = buildArticle(entryId, story, params);
 
-    const entryMetadata = resolveArticleMetadata(story);
+    const entryMetadata = siteConfig.resolveArticleMetadata(story);
 
     // Resolve Apple News sections from the config mapping + entry's category IDs.
     // An empty-string key ("") in the mapping is the default section, always included.

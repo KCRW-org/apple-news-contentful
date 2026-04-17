@@ -7,22 +7,9 @@ import type {
   ResolvedImage,
   ResolvedAudio,
   ResolvedVideo,
-  ResolvedPerson,
-  ResolvedPeople,
 } from '../types';
-import {
-  FIELD_NAMES,
-  CONTENT_TYPE_IDS,
-  IMAGE_SUBFIELDS,
-  PERSON_SUBFIELDS,
-  MEDIA_LINK_SUBFIELDS,
-  resolveImage,
-  resolveMediaLink,
-  resolveParentSlug,
-  resolveEntryUrl,
-  type ImageRole,
-} from './conventions';
-import { renderThumbnailUrl } from './kcrw';
+import type { ImageRole } from '../types';
+import { siteConfig, fieldNames, contentTypeIds } from './site';
 import type { EntrySource, SourcedEntry, SourcedAsset } from './entrySource';
 
 /**
@@ -44,53 +31,48 @@ export async function resolveStory(
   }
   const fields = entry.fields;
 
-  const title = ((fields[FIELD_NAMES.title] as string | undefined) ?? '').trim();
-  const description = (fields[FIELD_NAMES.description] as string | undefined) ?? null;
-  const corrections = (fields[FIELD_NAMES.corrections] as string | undefined) ?? null;
-  const bylineDate = (fields[FIELD_NAMES.bylineDate] as string | undefined) ?? null;
-  const bylineCount = (fields[FIELD_NAMES.bylineCount] as number | undefined) ?? 1;
-  const body = (fields[FIELD_NAMES.body] as Document | undefined) ?? null;
+  const title = ((fields[fieldNames.title] as string | undefined) ?? '').trim();
+  const description = (fields[fieldNames.description] as string | undefined) ?? null;
+  const corrections = (fields[fieldNames.corrections] as string | undefined) ?? null;
+  const bylineDate = (fields[fieldNames.bylineDate] as string | undefined) ?? null;
+  const bylineCount = (fields[fieldNames.bylineCount] as number | undefined) ?? 1;
+  const body = (fields[fieldNames.body] as Document | undefined) ?? null;
 
-  const imageLink = fields[FIELD_NAMES.image] as { sys: { id: string } } | undefined;
-  const audioLink = fields[FIELD_NAMES.audioMedia] as { sys: { id: string } } | undefined;
-  const videoLink = fields[FIELD_NAMES.videoMedia] as { sys: { id: string } } | undefined;
+  const imageLink = fields[fieldNames.image] as { sys: { id: string } } | undefined;
+  const audioLink = fields[fieldNames.audioMedia] as { sys: { id: string } } | undefined;
+  const videoLink = fields[fieldNames.videoMedia] as { sys: { id: string } } | undefined;
 
   const warnings: string[] = [];
 
-  const hosts = resolvePeople(fields, FIELD_NAMES.hostsCollection, entriesById, warnings, 'host');
-  const reporters = resolvePeople(fields, FIELD_NAMES.reportersCollection, entriesById, warnings, 'reporter');
-  const producers = resolvePeople(fields, FIELD_NAMES.producersCollection, entriesById, warnings, 'producer');
-  const guests = resolvePeople(fields, FIELD_NAMES.guestsCollection, entriesById, warnings, 'guest');
-  const showTitle = resolveFirstCollectionTitle(fields, FIELD_NAMES.showsCollection, entriesById, warnings, 'show');
-  const categoryTitle = resolveFirstCollectionTitle(fields, FIELD_NAMES.categoriesCollection, entriesById, warnings, 'category');
-  const categoryLinks = (fields[FIELD_NAMES.categoriesCollection] as { sys: { id: string } }[] | undefined) ?? [];
+  const people = siteConfig.resolvePeople(fields, entriesById, warnings);
+  const showTitle = resolveFirstCollectionTitle(fields, fieldNames.showsCollection, entriesById, warnings, 'show');
+  const categoryTitle = resolveFirstCollectionTitle(fields, fieldNames.categoriesCollection, entriesById, warnings, 'category');
+  const categoryLinks = (fields[fieldNames.categoriesCollection] as { sys: { id: string } }[] | undefined) ?? [];
   const categoryIds = categoryLinks.map(l => l.sys.id);
   const leadImage = imageLink ? resolveImageEntry(imageLink.sys.id, entriesById, assetsById, warnings, 'Lead image', 'lead') : null;
 
-  // Canonical URL: derive from the story's own slug + parent show/section.
-  const slug = fields[FIELD_NAMES.slug] as string | undefined;
+  const slug = fields[fieldNames.slug] as string | undefined;
   const parentLookup = new Map(
     [...entriesById.entries()].map(([id, e]) => [id, { contentType: e.contentType, fields: e.fields }]),
   );
-  const parent = resolveParentSlug(fields, 'Story', parentLookup);
-  const canonicalUrl = resolveEntryUrl(
+  const parent = siteConfig.resolveParentSlug(fields, 'Story', parentLookup);
+  const canonicalUrl = siteConfig.resolveEntryUrl(
     { contentType: 'Story', slug, parentSlug: parent?.slug, parentContentType: parent?.contentType },
     params.canonicalUrlTemplate ?? '',
   );
 
-  // Thumbnail: lead image re-sized to thumb width, or fall back to the show's image.
   let thumbnailUrl: string | null = null;
   if (leadImage) {
-    thumbnailUrl = renderThumbnailUrl(leadImage);
+    thumbnailUrl = siteConfig.renderThumbnailUrl(leadImage);
   } else {
-    const showItems = (fields[FIELD_NAMES.showsCollection] as { sys: { id: string } }[] | undefined) ?? [];
+    const showItems = (fields[fieldNames.showsCollection] as { sys: { id: string } }[] | undefined) ?? [];
     const showId = showItems[0]?.sys?.id;
     const showEntry = showId ? entriesById.get(showId) : undefined;
     if (showEntry) {
-      const showImageLink = showEntry.fields[FIELD_NAMES.image] as { sys: { id: string } } | undefined;
+      const showImageLink = showEntry.fields[fieldNames.image] as { sys: { id: string } } | undefined;
       if (showImageLink) {
         const showImage = resolveImageEntry(showImageLink.sys.id, entriesById, assetsById, warnings, 'Show image', 'thumb');
-        thumbnailUrl = showImage ? renderThumbnailUrl(showImage) : null;
+        thumbnailUrl = showImage ? siteConfig.renderThumbnailUrl(showImage) : null;
       }
     }
   }
@@ -110,8 +92,6 @@ export async function resolveStory(
   await Promise.all(
     hyperlinkIds.map(id => resolveHyperlink(id, source, linkMap, params.canonicalUrlTemplate ?? '', warnings)),
   );
-
-  const people: ResolvedPeople = { hosts, reporters, producers, guests };
 
   return {
     title,
@@ -137,35 +117,6 @@ export async function resolveStory(
 
 // ── Private helpers ──────────────────────────────────────────────────────────
 
-function resolvePeople(
-  fields: Record<string, unknown>,
-  collectionField: string,
-  entriesById: Map<string, SourcedEntry>,
-  warnings: string[],
-  label: string,
-): ResolvedPerson[] {
-  const items = (fields[collectionField] as { sys: { id: string } }[] | undefined) ?? [];
-  return items.flatMap(link => {
-    const id = link.sys.id;
-    const entry = entriesById.get(id);
-    if (!entry) {
-      warnings.push(`${label} entry ${id} not found; skipped.`);
-      return [];
-    }
-    const name = entry.fields[PERSON_SUBFIELDS.name] as string | undefined;
-    if (!name) {
-      warnings.push(`${label} entry ${id} has no ${PERSON_SUBFIELDS.name}; skipped.`);
-      return [];
-    }
-    return [{
-      id,
-      name,
-      title: (entry.fields[PERSON_SUBFIELDS.title] as string | undefined) ?? null,
-      slug: (entry.fields[PERSON_SUBFIELDS.slug] as string | undefined) ?? null,
-    } as ResolvedPerson];
-  });
-}
-
 function resolveFirstCollectionTitle(
   fields: Record<string, unknown>,
   collectionField: string,
@@ -182,7 +133,7 @@ function resolveFirstCollectionTitle(
     warnings.push(`${label} entry ${id} not found; title omitted.`);
     return null;
   }
-  const title = entry.fields[FIELD_NAMES.title] as string | undefined;
+  const title = entry.fields[fieldNames.title] as string | undefined;
   return title?.trim() ? title.trim() : null;
 }
 
@@ -200,21 +151,7 @@ function resolveImageEntry(
     return null;
   }
 
-  const fields = { ...entry.fields };
-  const assetLink = fields[IMAGE_SUBFIELDS.asset] as { sys?: { linkType?: string; id?: string } } | undefined;
-  if (assetLink?.sys?.linkType === 'Asset' && assetLink.sys.id) {
-    const asset = assetsById.get(assetLink.sys.id);
-    if (!asset) {
-      warnings.push(`${label} (entry ${id}) asset ${assetLink.sys.id} not found; article will publish without it.`);
-      return null;
-    }
-    fields[IMAGE_SUBFIELDS.asset] = {
-      sys: { id: asset.id },
-      fields: { file: { url: asset.url, details: { image: { width: asset.width, height: asset.height } } } },
-    };
-  }
-
-  const resolved = resolveImage(fields, role);
+  const resolved = siteConfig.resolveImage(entry.fields, role, assetsById);
   if (!resolved) {
     warnings.push(`${label} (entry ${id}) could not be resolved; article will publish without it.`);
   }
@@ -231,9 +168,9 @@ function resolveAudioEntry(
     warnings.push(`Audio media entry ${id} not found; article will publish without it.`);
     return null;
   }
-  const url = entry.fields[MEDIA_LINK_SUBFIELDS.mediaUrl] as string | undefined;
+  const url = entry.fields['mediaUrl'] as string | undefined;
   if (!url) {
-    warnings.push(`Audio media entry ${id} has no ${MEDIA_LINK_SUBFIELDS.mediaUrl}; article will publish without it.`);
+    warnings.push(`Audio media entry ${id} has no mediaUrl; article will publish without it.`);
     return null;
   }
   return { url };
@@ -249,9 +186,9 @@ function resolveVideoEntry(
     warnings.push(`Video media entry ${id} not found; article will publish without it.`);
     return null;
   }
-  const url = entry.fields[MEDIA_LINK_SUBFIELDS.mediaUrl] as string | undefined;
+  const url = entry.fields['mediaUrl'] as string | undefined;
   if (!url) {
-    warnings.push(`Video media entry ${id} has no ${MEDIA_LINK_SUBFIELDS.mediaUrl}; article will publish without it.`);
+    warnings.push(`Video media entry ${id} has no mediaUrl; article will publish without it.`);
     return null;
   }
   return { url };
@@ -269,23 +206,12 @@ function resolveBodyEmbed(
     warnings.push(`Embedded entry ${id} not found; it will be omitted from the body.`);
     return;
   }
-  if (entry.contentType === CONTENT_TYPE_IDS.photo) {
-    const fields = { ...entry.fields };
-    const assetLink = fields[IMAGE_SUBFIELDS.asset] as { sys?: { linkType?: string; id?: string } } | undefined;
-    if (assetLink?.sys?.linkType === 'Asset' && assetLink.sys.id) {
-      const asset = assetsById.get(assetLink.sys.id);
-      if (asset) {
-        fields[IMAGE_SUBFIELDS.asset] = {
-          sys: { id: asset.id },
-          fields: { file: { url: asset.url, details: { image: { width: asset.width, height: asset.height } } } },
-        };
-      }
-    }
-    const image = resolveImage(fields, 'body');
+  if (entry.contentType === contentTypeIds.photo) {
+    const image = siteConfig.resolveImage(entry.fields, 'body', assetsById);
     if (image) embedMap.set(id, { type: 'photo', ...image });
     else warnings.push(`Embedded photo entry ${id} could not be resolved; it will be omitted from the body.`);
-  } else if (entry.contentType === CONTENT_TYPE_IDS.mediaLink) {
-    const media = resolveMediaLink(entry.fields);
+  } else if (entry.contentType === contentTypeIds.mediaLink) {
+    const media = siteConfig.resolveMediaLink(entry.fields);
     if (media) embedMap.set(id, media);
     else warnings.push(`Embedded media entry ${id} could not be resolved; it will be omitted from the body.`);
   } else {
@@ -312,9 +238,9 @@ async function resolveHyperlink(
       [...entriesById.entries()].map(([eid, e]: [string, SourcedEntry]) => [eid, { contentType: e.contentType, fields: e.fields }]),
     );
 
-    const slug = entry.fields[FIELD_NAMES.slug] as string | undefined;
-    const parent = resolveParentSlug(entry.fields, entry.contentType, lookup);
-    const url = resolveEntryUrl(
+    const slug = entry.fields[fieldNames.slug] as string | undefined;
+    const parent = siteConfig.resolveParentSlug(entry.fields, entry.contentType, lookup);
+    const url = siteConfig.resolveEntryUrl(
       { contentType: entry.contentType, slug, parentSlug: parent?.slug, parentContentType: parent?.contentType },
       canonicalUrlTemplate,
     );

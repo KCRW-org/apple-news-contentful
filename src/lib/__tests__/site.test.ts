@@ -1,9 +1,9 @@
-// Tests for the public contract functions in conventions.ts.
-// These cover image URL transforms, image resolution, and the KCRW-specific
-// resolver functions (byline, credits, media links, URL resolution).
+// Tests for the SiteConfig implementation in site.ts.
+// Adapted from conventions.test.ts and kcrw.test.ts — tests the public
+// siteConfig interface rather than the internal helpers directly.
 
 import { describe, it, expect } from 'vitest';
-import { renderImageUrl, resolveImage, formatByline, renderAfterBody, resolveMediaLink, resolveParentSlug, resolveEntryUrl, FIELD_NAMES } from '../conventions';
+import { siteConfig, fieldNames } from '../site';
 import type { ResolvedPeople, ResolvedPerson, ResolvedStory } from '../../types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ const makeStory = (overrides: Partial<ResolvedStory> = {}): ResolvedStory => ({
 
 describe('renderImageUrl', () => {
   it('applies w, fm=jpg, and q for the lead role', () => {
-    const url = new URL(renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg', 'lead'));
+    const url = new URL(siteConfig.renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg', 'lead'));
     expect(url.searchParams.get('w')).toBe('2048');
     expect(url.searchParams.get('fm')).toBe('jpg');
     expect(url.searchParams.get('q')).toBe('80');
@@ -51,18 +51,18 @@ describe('renderImageUrl', () => {
   });
 
   it('uses a smaller width for the body role', () => {
-    const url = new URL(renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg', 'body'));
+    const url = new URL(siteConfig.renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg', 'body'));
     expect(url.searchParams.get('w')).toBe('1600');
   });
 
   it('preserves pre-existing query params on the source URL', () => {
-    const url = new URL(renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg?foo=bar', 'body'));
+    const url = new URL(siteConfig.renderImageUrl('https://images.ctfassets.net/x/y/photo.jpg?foo=bar', 'body'));
     expect(url.searchParams.get('foo')).toBe('bar');
     expect(url.searchParams.get('w')).toBe('1600');
   });
 
   it('normalizes protocol-relative URLs to https', () => {
-    expect(renderImageUrl('//images.ctfassets.net/x/y/photo.jpg', 'thumb'))
+    expect(siteConfig.renderImageUrl('//images.ctfassets.net/x/y/photo.jpg', 'thumb'))
       .toMatch(/^https:\/\//);
   });
 });
@@ -71,13 +71,13 @@ describe('renderImageUrl', () => {
 
 describe('resolveImage', () => {
   it('returns null when no asset url is present', () => {
-    expect(resolveImage({})).toBeNull();
-    expect(resolveImage({ asset: {} })).toBeNull();
-    expect(resolveImage({ asset: { fields: { file: {} } } })).toBeNull();
+    expect(siteConfig.resolveImage({}, 'lead')).toBeNull();
+    expect(siteConfig.resolveImage({ asset: {} }, 'lead')).toBeNull();
+    expect(siteConfig.resolveImage({ asset: { fields: { file: {} } } }, 'lead')).toBeNull();
   });
 
   it('scales width/height proportionally to the lead target', () => {
-    const image = resolveImage({
+    const image = siteConfig.resolveImage({
       asset: { fields: { file: { url: 'https://img.example.com/p.jpg', details: { image: { width: 4000, height: 3000 } } } } },
     }, 'lead');
     expect(image?.width).toBe(2048);
@@ -85,7 +85,7 @@ describe('resolveImage', () => {
   });
 
   it('preserves original dimensions when source is narrower than the target', () => {
-    const image = resolveImage({
+    const image = siteConfig.resolveImage({
       asset: { fields: { file: { url: 'https://img.example.com/p.jpg', details: { image: { width: 600, height: 400 } } } } },
     }, 'lead');
     expect(image?.width).toBe(600);
@@ -93,7 +93,7 @@ describe('resolveImage', () => {
   });
 
   it('leaves dimensions undefined when source dimensions are missing', () => {
-    const image = resolveImage({
+    const image = siteConfig.resolveImage({
       asset: { fields: { file: { url: 'https://img.example.com/p.jpg' } } },
     }, 'body');
     expect(image?.width).toBeUndefined();
@@ -101,7 +101,7 @@ describe('resolveImage', () => {
   });
 
   it('passes through altText, caption, and credit', () => {
-    const image = resolveImage({
+    const image = siteConfig.resolveImage({
       asset: { fields: { file: { url: 'https://img.example.com/p.jpg', details: { image: { width: 1000, height: 500 } } } } },
       altText: 'alt',
       photoCaption: 'cap',
@@ -113,10 +113,34 @@ describe('resolveImage', () => {
   });
 
   it('extracts asset ID from sys', () => {
-    const image = resolveImage({
+    const image = siteConfig.resolveImage({
       asset: { sys: { id: 'asset-123' }, fields: { file: { url: 'https://img.example.com/p.jpg' } } },
     }, 'body');
     expect(image?.id).toBe('asset-123');
+  });
+
+  it('hydrates asset from assetsById when asset is an unresolved link', () => {
+    const assetsById = new Map([
+      ['asset-1', { id: 'asset-1', url: 'https://img.example.com/p.jpg', width: 2000, height: 1000 }],
+    ]);
+    const image = siteConfig.resolveImage(
+      { asset: { sys: { linkType: 'Asset', id: 'asset-1' } } },
+      'body',
+      assetsById,
+    );
+    expect(image).not.toBeNull();
+    expect(image?.id).toBe('asset-1');
+    expect(image?.width).toBe(1600);
+  });
+
+  it('returns null when assetsById does not contain the linked asset', () => {
+    const assetsById = new Map<string, { id: string; url: string; width: number | undefined; height: number | undefined }>();
+    const image = siteConfig.resolveImage(
+      { asset: { sys: { linkType: 'Asset', id: 'missing' } } },
+      'body',
+      assetsById,
+    );
+    expect(image).toBeNull();
   });
 });
 
@@ -128,26 +152,30 @@ describe('formatByline — prefix selection', () => {
     people.hosts = [person({ name: 'Alex Jones' })];
     people.reporters = [person({ name: 'Jane Doe' })];
     people.producers = [person({ name: 'Sam' })];
-    expect(formatByline(people, null, null)).toBe('Hosted by Alex Jones');
+    expect(siteConfig.formatByline(people, null, null, 1)).toBe('Hosted by Alex Jones');
   });
 
   it('uses "Reported by" when there are no hosts but reporters are present', () => {
     const people = emptyPeople();
     people.reporters = [person({ name: 'Jane Doe' })];
     people.producers = [person({ name: 'Sam' })];
-    expect(formatByline(people, null, null)).toBe('Reported by Jane Doe');
+    expect(siteConfig.formatByline(people, null, null, 1)).toBe('Reported by Jane Doe');
   });
 
   it('uses "By" when only producers are present', () => {
     const people = emptyPeople();
     people.producers = [person({ name: 'Sam Taylor' })];
-    expect(formatByline(people, null, null)).toBe('By Sam Taylor');
+    expect(siteConfig.formatByline(people, null, null, 1)).toBe('By Sam Taylor');
   });
 
   it('omits the names segment when only guests are present', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Historian Ham' })];
-    expect(formatByline(people, '2024-01-01', null)).toBe('Monday, January 1, 2024');
+    expect(siteConfig.formatByline(people, '2024-01-01', null, 1)).toBe('Monday, January 1, 2024');
+  });
+
+  it('returns null when all collections are empty', () => {
+    expect(siteConfig.formatByline(emptyPeople(), null, null, 1)).toBeNull();
   });
 });
 
@@ -157,20 +185,20 @@ describe('formatByline — bylineCount', () => {
   it('includes only the first contributor when bylineCount is 1 (default)', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alice' }), person({ name: 'Bob' }), person({ name: 'Carol' })];
-    expect(formatByline(people, null, null)).toBe('Hosted by Alice');
+    expect(siteConfig.formatByline(people, null, null, 1)).toBe('Hosted by Alice');
   });
 
   it('includes up to bylineCount contributors', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alice' }), person({ name: 'Bob' }), person({ name: 'Carol' })];
-    expect(formatByline(people, null, null, 2)).toBe('Hosted by Alice and Bob');
-    expect(formatByline(people, null, null, 3)).toBe('Hosted by Alice, Bob and Carol');
+    expect(siteConfig.formatByline(people, null, null, 2)).toBe('Hosted by Alice and Bob');
+    expect(siteConfig.formatByline(people, null, null, 3)).toBe('Hosted by Alice, Bob and Carol');
   });
 
   it('includes all contributors when bylineCount exceeds the list length', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alice' }), person({ name: 'Bob' })];
-    expect(formatByline(people, null, null, 10)).toBe('Hosted by Alice and Bob');
+    expect(siteConfig.formatByline(people, null, null, 10)).toBe('Hosted by Alice and Bob');
   });
 });
 
@@ -180,19 +208,42 @@ describe('formatByline — separators', () => {
   it('joins name block, date, and category with bullet separators', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex' })];
-    expect(formatByline(people, '2024-01-01', 'Politics'))
+    expect(siteConfig.formatByline(people, '2024-01-01', 'Politics', 1))
       .toBe('Hosted by Alex \u2022 Monday, January 1, 2024 \u2022 Politics');
   });
 
   it('drops the date when the ISO value is invalid (warns via console)', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex' })];
-    expect(formatByline(people, 'not-a-date', 'Politics'))
+    expect(siteConfig.formatByline(people, 'not-a-date', 'Politics', 1))
       .toBe('Hosted by Alex \u2022 Politics');
   });
 
   it('returns null when every segment is empty', () => {
-    expect(formatByline(emptyPeople(), null, null)).toBeNull();
+    expect(siteConfig.formatByline(emptyPeople(), null, null, 1)).toBeNull();
+  });
+});
+
+// ── authorNames ──────────────────────────────────────────────────────────────
+
+describe('authorNames', () => {
+  it('returns host names when hosts are present', () => {
+    const people = emptyPeople();
+    people.hosts = [person({ name: 'Alice' }), person({ name: 'Bob' })];
+    expect(siteConfig.authorNames(people, 1)).toEqual(['Alice']);
+    expect(siteConfig.authorNames(people, 2)).toEqual(['Alice', 'Bob']);
+  });
+
+  it('returns reporter names when no hosts', () => {
+    const people = emptyPeople();
+    people.reporters = [person({ name: 'Jane' })];
+    expect(siteConfig.authorNames(people, 1)).toEqual(['Jane']);
+  });
+
+  it('returns empty array when only guests', () => {
+    const people = emptyPeople();
+    people.guests = [person({ name: 'Guest' })];
+    expect(siteConfig.authorNames(people, 1)).toEqual([]);
   });
 });
 
@@ -200,22 +251,21 @@ describe('formatByline — separators', () => {
 
 describe('renderAfterBody — credits block', () => {
   const template = 'https://www.kcrw.com/path';
-  // Credits are wrapped in a single container; extract its children for inspection.
-  const creditsContainer = (comps: ReturnType<typeof renderAfterBody>) =>
+  const creditsContainer = (comps: ReturnType<typeof siteConfig.renderAfterBody>) =>
     comps.find(c => (c as any).identifier === 'credits') as any;
-  const creditsChildren = (comps: ReturnType<typeof renderAfterBody>): any[] =>
+  const creditsChildren = (comps: ReturnType<typeof siteConfig.renderAfterBody>): any[] =>
     creditsContainer(comps)?.components ?? [];
-  const allText = (comps: ReturnType<typeof renderAfterBody>) =>
+  const allText = (comps: ReturnType<typeof siteConfig.renderAfterBody>) =>
     creditsChildren(comps).map((c: any) => c.text as string ?? '').join('');
 
   it('returns an empty array when no people are present and no corrections', () => {
-    expect(renderAfterBody({ story: makeStory(), canonicalUrlTemplate: template })).toEqual([]);
+    expect(siteConfig.renderAfterBody({ story: makeStory(), canonicalUrlTemplate: template })).toEqual([]);
   });
 
   it('wraps credits in a container with identifier "credits"', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
+    const components = siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
     const container = creditsContainer(components);
     expect(container).toBeDefined();
     expect(container.role).toBe('container');
@@ -224,7 +274,7 @@ describe('renderAfterBody — credits block', () => {
   it('starts with a heading3 "Credits" component inside the container', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
-    const children = creditsChildren(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const children = creditsChildren(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(children[0].role).toBe('heading3');
     expect(children[0].text).toBe('Credits');
   });
@@ -232,7 +282,7 @@ describe('renderAfterBody — credits block', () => {
   it('omits roles with no people', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
+    const components = siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
     const text = allText(components);
     expect(text).toContain('Hosts');
     expect(text).not.toContain('Guests');
@@ -242,7 +292,7 @@ describe('renderAfterBody — credits block', () => {
   it('renders each role as a heading4 followed by a body with ul', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Dr. Jane', title: 'Historian', slug: 'jane' })];
-    const children = creditsChildren(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const children = creditsChildren(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     const h4 = children.find((c: any) => c.role === 'heading4');
     expect(h4).toBeDefined();
     expect(h4.text).toBe('Guests');
@@ -257,7 +307,7 @@ describe('renderAfterBody — credits block', () => {
       person({ name: 'Dr. Jane', title: 'Historian', slug: 'jane' }),
       person({ name: 'Bob', title: null, slug: 'bob' }),
     ];
-    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const text = allText(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian</li>');
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/bob">Bob</a></li>');
     expect(text).not.toMatch(/<a [^>]*>Bob<\/a> - /);
@@ -267,7 +317,7 @@ describe('renderAfterBody — credits block', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', title: 'Senior Host', slug: 'alex' })];
     people.producers = [person({ name: 'Sam', title: 'EP', slug: 'sam' })];
-    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const text = allText(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/sam">Sam</a></li>');
     expect(text).not.toContain('Senior Host');
@@ -277,7 +327,7 @@ describe('renderAfterBody — credits block', () => {
   it('renders plain text when a person has no slug', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: null })];
-    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const text = allText(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(text).toContain('<li>Alex</li>');
     expect(text).not.toContain('<a ');
   });
@@ -285,7 +335,7 @@ describe('renderAfterBody — credits block', () => {
   it('renders each person as a separate li', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' }), person({ name: 'Jordan', slug: 'jordan' })];
-    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const text = allText(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
     expect(text).toContain('<li><a href="https://www.kcrw.com/people/jordan">Jordan</a></li>');
   });
@@ -293,9 +343,15 @@ describe('renderAfterBody — credits block', () => {
   it('escapes HTML-unsafe characters in names and titles', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Jane <script>', title: 'Role & More', slug: 'jane' })];
-    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const text = allText(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
     expect(text).toContain('Jane &lt;script&gt;');
     expect(text).toContain('Role &amp; More');
+  });
+
+  it('returns empty array when only reporters are present (not listed in credits)', () => {
+    const people = emptyPeople();
+    people.reporters = [person({ name: 'Jane' })];
+    expect(siteConfig.renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template })).toEqual([]);
   });
 });
 
@@ -306,7 +362,7 @@ describe('renderAfterBody — corrections', () => {
 
   it('includes a corrections component when corrections is set', () => {
     const story = makeStory({ corrections: 'An earlier version was incorrect.' });
-    const components = renderAfterBody({ story, canonicalUrlTemplate: template });
+    const components = siteConfig.renderAfterBody({ story, canonicalUrlTemplate: template });
     const corrections = components.find(c => (c as any).identifier === 'corrections');
     expect(corrections).toBeDefined();
     expect((corrections as any).text).toContain('Correction:');
@@ -317,7 +373,7 @@ describe('renderAfterBody — corrections', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
     const story = makeStory({ people, corrections: 'Fix' });
-    const components = renderAfterBody({ story, canonicalUrlTemplate: template });
+    const components = siteConfig.renderAfterBody({ story, canonicalUrlTemplate: template });
     const ids = components.map(c => (c as any).identifier).filter(Boolean);
     expect(ids[0]).toBe('corrections');
     expect(ids[1]).toBe('credits');
@@ -328,54 +384,54 @@ describe('renderAfterBody — corrections', () => {
 
 describe('resolveMediaLink', () => {
   it('returns a youtube embed when hosting is youtube', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://youtu.be/abc123', hosting: 'youtube' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://youtu.be/abc123', hosting: 'youtube' }))
       .toEqual({ type: 'youtube', url: 'https://youtu.be/abc123' });
   });
 
   it('returns a youtube embed when hosting is iframe and url contains youtube.com', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://www.youtube.com/embed/abc123', hosting: 'iframe' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://www.youtube.com/embed/abc123', hosting: 'iframe' }))
       .toEqual({ type: 'youtube', url: 'https://www.youtube.com/embed/abc123' });
   });
 
   it('returns a youtube embed when hosting is iframe and url contains youtu.be', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://youtu.be/abc123', hosting: 'iframe' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://youtu.be/abc123', hosting: 'iframe' }))
       .toEqual({ type: 'youtube', url: 'https://youtu.be/abc123' });
   });
 
   it('returns null when hosting is iframe but url is not youtube', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://vimeo.com/abc123', hosting: 'iframe' })).toBeNull();
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://vimeo.com/abc123', hosting: 'iframe' })).toBeNull();
   });
 
   it('returns an audio embed when hosting is soundstack', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://cdn.soundstack.com/abc.mp3', hosting: 'soundstack' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://cdn.soundstack.com/abc.mp3', hosting: 'soundstack' }))
       .toEqual({ type: 'audio', url: 'https://cdn.soundstack.com/abc.mp3' });
   });
 
   it('returns an audio embed when hosting is soundstack-podcast', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://cdn.soundstack.com/ep.mp3', hosting: 'soundstack-podcast' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://cdn.soundstack.com/ep.mp3', hosting: 'soundstack-podcast' }))
       .toEqual({ type: 'audio', url: 'https://cdn.soundstack.com/ep.mp3' });
   });
 
   it('returns an audio embed when hosting is generic', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://example.com/audio.mp3', hosting: 'generic' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://example.com/audio.mp3', hosting: 'generic' }))
       .toEqual({ type: 'audio', url: 'https://example.com/audio.mp3' });
   });
 
   it('returns an audio embed when hosting is cloudfront', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://d1234.cloudfront.net/audio.mp3', hosting: 'cloudfront' }))
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://d1234.cloudfront.net/audio.mp3', hosting: 'cloudfront' }))
       .toEqual({ type: 'audio', url: 'https://d1234.cloudfront.net/audio.mp3' });
   });
 
   it('returns null when url is absent', () => {
-    expect(resolveMediaLink({ hosting: 'youtube' })).toBeNull();
+    expect(siteConfig.resolveMediaLink({ hosting: 'youtube' })).toBeNull();
   });
 
   it('returns null when hosting is an unrecognised value', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://example.com/file.mp3', hosting: 'other' })).toBeNull();
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://example.com/file.mp3', hosting: 'other' })).toBeNull();
   });
 
   it('returns null when hosting is absent', () => {
-    expect(resolveMediaLink({ mediaUrl: 'https://example.com/file.mp3' })).toBeNull();
+    expect(siteConfig.resolveMediaLink({ mediaUrl: 'https://example.com/file.mp3' })).toBeNull();
   });
 });
 
@@ -384,52 +440,52 @@ describe('resolveMediaLink', () => {
 describe('resolveParentSlug', () => {
   it('resolves the first show via entriesById for a Story', () => {
     const entriesById = new Map([
-      ['show-1', { contentType: 'Show', fields: { [FIELD_NAMES.slug]: 'morning-edition' } }],
-      ['show-2', { contentType: 'Show', fields: { [FIELD_NAMES.slug]: 'other-show' } }],
+      ['show-1', { contentType: 'Show', fields: { [fieldNames.slug]: 'morning-edition' } }],
+      ['show-2', { contentType: 'Show', fields: { [fieldNames.slug]: 'other-show' } }],
     ]);
     const fields = {
-      [FIELD_NAMES.showsCollection]: [
+      [fieldNames.showsCollection]: [
         { sys: { id: 'show-1' } },
         { sys: { id: 'show-2' } },
       ],
     };
-    expect(resolveParentSlug(fields, 'Story', entriesById)).toEqual({ slug: 'morning-edition', contentType: 'Show' });
+    expect(siteConfig.resolveParentSlug(fields, 'Story', entriesById)).toEqual({ slug: 'morning-edition', contentType: 'Show' });
   });
 
   it('returns undefined when showsCollection is empty', () => {
-    expect(resolveParentSlug({ [FIELD_NAMES.showsCollection]: [] }, 'Story')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({ [fieldNames.showsCollection]: [] }, 'Story')).toBeUndefined();
   });
 
   it('returns undefined when showsCollection field is absent', () => {
-    expect(resolveParentSlug({}, 'Story')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({}, 'Story')).toBeUndefined();
   });
 
   it('returns undefined when the show is not in entriesById', () => {
-    const fields = { [FIELD_NAMES.showsCollection]: [{ sys: { id: 'show-1' } }] };
-    expect(resolveParentSlug(fields, 'Story', new Map())).toBeUndefined();
+    const fields = { [fieldNames.showsCollection]: [{ sys: { id: 'show-1' } }] };
+    expect(siteConfig.resolveParentSlug(fields, 'Story', new Map())).toBeUndefined();
   });
 
   it('returns undefined when the linked show has no slug', () => {
     const entriesById = new Map([['show-1', { contentType: 'Show', fields: {} }]]);
-    const fields = { [FIELD_NAMES.showsCollection]: [{ sys: { id: 'show-1' } }] };
-    expect(resolveParentSlug(fields, 'Story', entriesById)).toBeUndefined();
+    const fields = { [fieldNames.showsCollection]: [{ sys: { id: 'show-1' } }] };
+    expect(siteConfig.resolveParentSlug(fields, 'Story', entriesById)).toBeUndefined();
   });
 
   it('resolves parent for a LandingPage via seoMetadata → canonicalUrlParent', () => {
     const entriesById = new Map([
       ['seo-1', { contentType: 'seoMetadata', fields: { canonicalUrlParent: { sys: { id: 'parent-1' } } } }],
-      ['parent-1', { contentType: 'LandingPage', fields: { [FIELD_NAMES.slug]: 'music' } }],
+      ['parent-1', { contentType: 'LandingPage', fields: { [fieldNames.slug]: 'music' } }],
     ]);
     const fields = { seoMetadata: { sys: { id: 'seo-1' } } };
-    expect(resolveParentSlug(fields, 'LandingPage', entriesById)).toEqual({ slug: 'music', contentType: 'LandingPage' });
+    expect(siteConfig.resolveParentSlug(fields, 'LandingPage', entriesById)).toEqual({ slug: 'music', contentType: 'LandingPage' });
   });
 
   it('returns undefined for LandingPage when entriesById is absent', () => {
-    expect(resolveParentSlug({ seoMetadata: { sys: { id: 'seo-1' } } }, 'LandingPage')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({ seoMetadata: { sys: { id: 'seo-1' } } }, 'LandingPage')).toBeUndefined();
   });
 
   it('returns undefined for unknown content types', () => {
-    expect(resolveParentSlug({}, 'Unknown')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({}, 'Unknown')).toBeUndefined();
   });
 });
 
@@ -440,75 +496,208 @@ describe('resolveEntryUrl', () => {
   const template = `${base}/some/path`;
 
   it('resolves a Story with a parent show', () => {
-    expect(resolveEntryUrl({ contentType: 'Story', slug: 'my-story', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
       .toBe(`${base}/shows/morning-edition/stories/my-story`);
   });
 
   it('resolves a Story without a parent', () => {
-    expect(resolveEntryUrl({ contentType: 'Story', slug: 'my-story' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story' }, template))
       .toBe(`${base}/stories/my-story`);
   });
 
   it('resolves a Show', () => {
-    expect(resolveEntryUrl({ contentType: 'Show', slug: 'morning-edition' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Show', slug: 'morning-edition' }, template))
       .toBe(`${base}/shows/morning-edition`);
   });
 
   it('resolves an Event without a parent', () => {
-    expect(resolveEntryUrl({ contentType: 'Event', slug: 'big-concert' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Event', slug: 'big-concert' }, template))
       .toBe(`${base}/events/big-concert`);
   });
 
   it('resolves an Event nested under a Show', () => {
-    expect(resolveEntryUrl({ contentType: 'Event', slug: 'big-concert', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Event', slug: 'big-concert', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
       .toBe(`${base}/shows/morning-edition/big-concert`);
   });
 
   it('resolves a Page without a parent', () => {
-    expect(resolveEntryUrl({ contentType: 'Page', slug: 'about' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Page', slug: 'about' }, template))
       .toBe(`${base}/pages/about`);
   });
 
   it('resolves a Page nested under a LandingPage', () => {
-    expect(resolveEntryUrl({ contentType: 'Page', slug: 'about', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Page', slug: 'about', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
       .toBe(`${base}/music/about`);
   });
 
   it('resolves a LandingPage without a parent', () => {
-    expect(resolveEntryUrl({ contentType: 'LandingPage', slug: 'music' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'LandingPage', slug: 'music' }, template))
       .toBe(`${base}/music`);
   });
 
   it('resolves a LandingPage nested under another LandingPage', () => {
-    expect(resolveEntryUrl({ contentType: 'LandingPage', slug: 'jazz', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'LandingPage', slug: 'jazz', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
       .toBe(`${base}/music/jazz`);
   });
 
   it('resolves a Category without a parent', () => {
-    expect(resolveEntryUrl({ contentType: 'Category', slug: 'news' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Category', slug: 'news' }, template))
       .toBe(`${base}/categories/news`);
   });
 
   it('resolves a Category nested under a LandingPage', () => {
-    expect(resolveEntryUrl({ contentType: 'Category', slug: 'news', parentSlug: 'topics', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Category', slug: 'news', parentSlug: 'topics', parentContentType: 'LandingPage' }, template))
       .toBe(`${base}/topics/news`);
   });
 
   it('resolves a Person', () => {
-    expect(resolveEntryUrl({ contentType: 'Person', slug: 'jane-doe' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Person', slug: 'jane-doe' }, template))
       .toBe(`${base}/people/jane-doe`);
   });
 
   it('returns null for an unknown content type', () => {
-    expect(resolveEntryUrl({ contentType: 'Unknown', slug: 'foo' }, template)).toBeNull();
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Unknown', slug: 'foo' }, template)).toBeNull();
   });
 
   it('returns null when slug is absent', () => {
-    expect(resolveEntryUrl({ contentType: 'Story' }, template)).toBeNull();
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Story' }, template)).toBeNull();
   });
 
   it('uses empty base when canonicalUrlTemplate is empty', () => {
-    expect(resolveEntryUrl({ contentType: 'Show', slug: 'kcrw-music' }, ''))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Show', slug: 'kcrw-music' }, ''))
       .toBe('/shows/kcrw-music');
+  });
+
+  it('falls back to default path when parent content type is unknown', () => {
+    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story', parentSlug: 'foo', parentContentType: 'Unknown' }, template))
+      .toBe(`${base}/stories/my-story`);
+  });
+});
+
+// ── resolvePeople ────────────────────────────────────────────────────────────
+
+describe('resolvePeople', () => {
+  const makeEntry = (name: string, title?: string, slug?: string) => ({
+    id: `id-${name}`,
+    contentType: 'Person',
+    fields: { name, title: title ?? null, slug: slug ?? null },
+  });
+
+  it('resolves all four people collections', () => {
+    const entriesById = new Map([
+      ['h1', makeEntry('Host1', undefined, 'host1')],
+      ['r1', makeEntry('Reporter1')],
+      ['p1', makeEntry('Producer1')],
+      ['g1', makeEntry('Guest1', 'Expert')],
+    ]);
+    const fields = {
+      hosts: [{ sys: { id: 'h1' } }],
+      reporters: [{ sys: { id: 'r1' } }],
+      producers: [{ sys: { id: 'p1' } }],
+      guests: [{ sys: { id: 'g1' } }],
+    };
+    const warnings: string[] = [];
+    const result = siteConfig.resolvePeople(fields, entriesById, warnings);
+    expect(result.hosts).toHaveLength(1);
+    expect(result.hosts[0].name).toBe('Host1');
+    expect(result.reporters).toHaveLength(1);
+    expect(result.producers).toHaveLength(1);
+    expect(result.guests).toHaveLength(1);
+    expect(result.guests[0].title).toBe('Expert');
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('warns and skips when entry is not found', () => {
+    const fields = { hosts: [{ sys: { id: 'missing' } }] };
+    const warnings: string[] = [];
+    const result = siteConfig.resolvePeople(fields, new Map(), warnings);
+    expect(result.hosts).toHaveLength(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('missing');
+  });
+
+  it('warns and skips when entry has no name', () => {
+    const entriesById = new Map([
+      ['h1', { id: 'h1', contentType: 'Person', fields: {} }],
+    ]);
+    const fields = { hosts: [{ sys: { id: 'h1' } }] };
+    const warnings: string[] = [];
+    const result = siteConfig.resolvePeople(fields, entriesById, warnings);
+    expect(result.hosts).toHaveLength(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('no name');
+  });
+
+  it('returns empty arrays when no people fields are present', () => {
+    const warnings: string[] = [];
+    const result = siteConfig.resolvePeople({}, new Map(), warnings);
+    expect(result.hosts).toEqual([]);
+    expect(result.reporters).toEqual([]);
+    expect(result.producers).toEqual([]);
+    expect(result.guests).toEqual([]);
+    expect(warnings).toHaveLength(0);
+  });
+});
+
+// ── renderThumbnailUrl ──────────────────────────────────────────────────────
+
+describe('renderThumbnailUrl', () => {
+  it('uses fit=thumb by default', () => {
+    const url = new URL(siteConfig.renderThumbnailUrl({
+      url: 'https://images.ctfassets.net/x/y/photo.jpg?w=2048&fm=jpg&q=80',
+      width: 2048,
+      height: 1536,
+      focusHint: null,
+    }));
+    expect(url.searchParams.get('w')).toBe('1200');
+  });
+
+  it('uses fit=pad when focusHint is "nocrop"', () => {
+    const url = new URL(siteConfig.renderThumbnailUrl({
+      url: 'https://images.ctfassets.net/x/y/photo.jpg?w=2048&fm=jpg&q=80',
+      width: 2048,
+      height: 1536,
+      focusHint: 'nocrop',
+    }));
+    expect(url.searchParams.get('w')).toBe('1200');
+  });
+});
+
+// ── articleBase ──────────────────────────────────────────────────────────────
+
+describe('articleBase', () => {
+  it('has the expected top-level keys', () => {
+    expect(siteConfig.articleBase).toHaveProperty('version');
+    expect(siteConfig.articleBase).toHaveProperty('layout');
+    expect(siteConfig.articleBase).toHaveProperty('documentStyle');
+    expect(siteConfig.articleBase).toHaveProperty('textStyles');
+    expect(siteConfig.articleBase).toHaveProperty('componentTextStyles');
+    expect(siteConfig.articleBase).toHaveProperty('componentStyles');
+    expect(siteConfig.articleBase).toHaveProperty('componentLayouts');
+    expect(siteConfig.articleBase).toHaveProperty('metadata');
+  });
+
+  it('includes KCRW brand overrides (merged)', () => {
+    const cts = siteConfig.articleBase.componentTextStyles as Record<string, any>;
+    expect(cts['default-title'].fontName).toBe('TrebuchetMS-Bold');
+    expect(cts['default-title'].textTransform).toBe('uppercase');
+  });
+
+  it('preserves base structure values where KCRW does not override', () => {
+    expect(siteConfig.articleBase.version).toBe('1.7');
+  });
+});
+
+// ── fieldNames / contentTypeIds re-exports ──────────────────────────────────
+
+describe('convenience re-exports', () => {
+  it('fieldNames matches siteConfig.fieldNames', () => {
+    expect(fieldNames).toBe(siteConfig.fieldNames);
+  });
+
+  it('fieldNames has expected keys', () => {
+    expect(fieldNames.title).toBe('title');
+    expect(fieldNames.slug).toBe('slug');
+    expect(fieldNames.appleNewsData).toBe('appleNewsData');
   });
 });

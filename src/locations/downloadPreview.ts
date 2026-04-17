@@ -18,7 +18,7 @@ import JSZip from 'jszip';
 import { resolveStory } from '../lib/fetch';
 import { createDeliveryEntrySource } from '../lib/entrySource';
 import { buildArticle } from '../lib/article';
-import { resolveArticleMetadata } from '../lib/conventions';
+import { siteConfig } from '../lib/site';
 import type { AppInstallationParameters, ResolvedImage, ResolvedStory } from '../types';
 
 export type DownloadPreviewOptions = {
@@ -84,7 +84,7 @@ export async function downloadPreview(opts: DownloadPreviewOptions): Promise<Dow
   // the zip root, so we don't nest anything in subfolders.
   const zip = new JSZip();
   zip.file('article.json', JSON.stringify(articleJson, null, 2));
-  zip.file('metadata.json', JSON.stringify({ data: { isPreview: true, ...resolveArticleMetadata(story) } }, null, 2));
+  zip.file('metadata.json', JSON.stringify({ data: { isPreview: true, ...siteConfig.resolveArticleMetadata(story) } }, null, 2));
   for (const { filename, blob } of bundledFiles) {
     zip.file(filename, blob);
   }

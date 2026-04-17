@@ -3,7 +3,7 @@ import type { FunctionEventHandler, FunctionTypeEnum } from '@contentful/node-ap
 import type { AppInstallationParameters, AppleNewsData } from '../src/types';
 import type { ApiCredentials } from '../src/lib/api';
 import { deleteArticle } from '../src/lib/api';
-import { FIELD_NAMES } from '../src/lib/conventions';
+import { fieldNames } from '../src/lib/site';
 
 type AppEventHandler = FunctionEventHandler<FunctionTypeEnum.AppEventHandler, AppInstallationParameters>;
 
@@ -34,7 +34,7 @@ export const appEventHandler: AppEventHandler = async (event, context) => {
   }
   const credentials: ApiCredentials = { apiKeyId, apiKeySecret, channelId };
   const locale = params.locale ?? 'en-US';
-  const fieldName = FIELD_NAMES.appleNewsData;
+  const fieldName = fieldNames.appleNewsData;
 
   const { spaceId, environmentId, cma } = context;
   if (!cma) {

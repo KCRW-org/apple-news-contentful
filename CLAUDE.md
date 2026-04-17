@@ -27,7 +27,7 @@ npx vitest run src/lib/__tests__/article.test.ts
 
 ## Architecture
 
-This is a **Contentful App** (React SPA + Contentful App Actions) that publishes entries to Apple News Publisher. Adapt it to a different Contentful content model by editing `src/lib/conventions.ts`.
+This is a **Contentful App** (React SPA + Contentful App Actions) that publishes entries to Apple News Publisher. Adapt it to a different Contentful content model by replacing `src/lib/site.ts`.
 
 ### Two execution environments
 
@@ -43,11 +43,11 @@ This is a **Contentful App** (React SPA + Contentful App Actions) that publishes
 - **`functions/appleNews.ts`** — App Action handler: `publish`, `delete`, `checkStatus`, `refreshStatus`. The `publish` action creates or updates (no separate `update` action). Pre-flight conflict check (readArticle before resolveStory): detects state/revision drift and 404 (article deleted). Returns `{ conflict }` for the UI to confirm; re-call with `confirmed: true` (encoded in the JSON action string) to bypass. Auto-retries on `WRONG_REVISION`.
 - **`functions/appEvents.ts`** — Handles `unpublish`/`archive` lifecycle events; deletes Apple News article and clears `appleNewsData`.
 - **`src/locations/useAppleNews.ts`** — Shared hook (sidebar + editor). State machines for publish/delete, exponential-backoff polling (3s→60s, 10min budget), permission checks.
-- **`src/lib/conventions.ts`** — **Primary customization point.** Field name constants, shared types, and resolver functions (`formatByline`, `authorNames`, `resolveImage`, `resolveEntryUrl`, `renderAfterBody`, `resolveParentSlug`, `resolveMediaLink`, `resolveArticleMetadata`). Also holds `ARTICLE_BASE_STRUCTURE` and exports `ARTICLE_BASE` (base merged with `KCRW_OVERRIDES`).
-- **`src/lib/kcrw.ts`** — KCRW-specific private helpers (`selectBylinePeople`, `renderCreditsComponent`, `urlWithParent`, `renderThumbnailUrl`) and `KCRW_OVERRIDES` (ANF brand fonts, colors, layouts, dark mode). Replace to adapt to a different brand.
+- **`src/lib/siteConfig.ts`** — `SiteConfig` TypeScript interface: the full contract between framework code and site-specific logic. No implementation.
+- **`src/lib/site.ts`** — **Primary customization point.** KCRW implementation of `SiteConfig`. Contains all field name constants, content type IDs, resolver functions (`resolveImage`, `resolvePeople`, `formatByline`, `authorNames`, `resolveEntryUrl`, `resolveParentSlug`, `resolveMediaLink`, `resolveArticleMetadata`, `renderAfterBody`, `renderThumbnailUrl`), and the ANF article base (skeleton + brand overrides). Forks replace this single file. Exports `siteConfig`, `fieldNames`, `contentTypeIds`.
 - **`src/lib/utilities.ts`** — Generic helpers with no site-specific logic: `buildThumbnailUrl` (ANF 1:2–3:1 aspect-ratio clamping), `IMAGE_TARGET_WIDTHS`, `resolveAssetInfo`, `mergeDeep`, `stripMarkdown`, etc.
-- **`src/lib/fetch.ts`** — Resolves a Contentful entry into a flat `ResolvedStory` via `EntrySource`. Single `getEntryWithIncludes` call at depth 3 provides all linked entries and assets; no per-link round-trips. Imports `renderThumbnailUrl` from `kcrw.ts`.
-- **`src/lib/article.ts`** — Builds ANF from `ResolvedStory` using `ARTICLE_BASE` from `conventions.ts`. Sets `metadata.thumbnailURL`, `canonicalURL`, `authors`, `excerpt`. Deep-merges `articleCustomizationsJson` from config at the end.
+- **`src/lib/fetch.ts`** — Resolves a Contentful entry into a flat `ResolvedStory` via `EntrySource`. Single `getEntryWithIncludes` call at depth 3 provides all linked entries and assets; no per-link round-trips. Delegates all site-specific resolution to `siteConfig`.
+- **`src/lib/article.ts`** — Builds ANF from `ResolvedStory` using `siteConfig.articleBase`. Sets `metadata.thumbnailURL`, `canonicalURL`, `authors`, `excerpt`. Deep-merges `articleCustomizationsJson` from config at the end.
 - **`src/lib/entrySource.ts`** — `EntrySource` interface + CDA/CPA implementation via `createDeliveryEntrySource`. CDA returns published entries only; pass CPA base URL for draft-inclusive preview/download flows.
 - **`src/lib/api.ts`** — HMAC-SHA256-signed multipart HTTP calls to Apple News Publisher API.
 - **`src/locations/downloadPreview.ts`** — Builds `.news.zip` (article.json + bundled images) in-browser via CPA for the Apple News Preview macOS app.

@@ -40,20 +40,18 @@ Add a **JSON Object** field named `appleNewsData` (field ID: `appleNewsData`) to
 
 ### Customization
 
-**`src/lib/conventions.ts`** is the primary customization point. It contains all field name constants, types, and resolver functions. Edit this file to adapt the app to a different content model:
+**`src/lib/site.ts`** is the primary customization point — the single file forks replace. It implements the `SiteConfig` interface (`src/lib/siteConfig.ts`) and contains all field name constants, content type IDs, and resolver functions:
 
-- `formatByline(people, date, categoryTitle)` — change byline formatting or date locale
-- `resolveImage(fields, role)` — change how a linked photo entry maps to an image
-- `resolveEntryUrl(entry, canonicalUrlTemplate)` — add `case` branches for other linkable content types
-- `resolveMediaLink(fields)` — change how audio/video entries are identified
-- `renderAfterBody(ctx)` — add or reorder trailing content (corrections, credits, etc.)
-
-**`src/lib/kcrw.ts`** contains KCRW-specific private helpers and the ANF brand overrides. To adapt to a different brand, replace this file:
-
-- `renderThumbnailUrl(image)` — maps KCRW's `focusHint` field to Contentful Images API crop params (`fit=pad` for `'nocrop'`, `fit=thumb&f=…` for a focal point). Delegates aspect-ratio clamping to `buildThumbnailUrl` in `utilities.ts`.
-- `selectBylinePeople`, `renderCreditsComponent` — byline priority and credits block rendering
-- `urlWithParent(entry)` — KCRW URL construction for Show and LandingPage parent paths
-- `KCRW_OVERRIDES` — ANF brand fonts, colors, dark mode, layout
+- `resolveImage(fields, role, assetsById?)` — map a linked photo entry to an image
+- `resolvePeople(fields, entriesById, warnings)` — extract byline people from entry fields
+- `formatByline(people, date, categoryTitle, bylineCount)` — byline formatting and date locale
+- `authorNames(people, bylineCount)` — author list for Apple News metadata
+- `resolveEntryUrl(entry, canonicalUrlTemplate)` — URL resolution for linkable content types
+- `resolveMediaLink(fields)` — audio/video entry identification
+- `renderAfterBody(ctx)` — trailing content (corrections, credits, etc.)
+- `renderThumbnailUrl(image)` — thumbnail URL construction with crop/focus params
+- `resolveArticleMetadata(story)` — Apple News article metadata (maturity, links, etc.)
+- `articleBase` — ANF document skeleton with brand overrides (fonts, colors, dark mode, layouts)
 
 **`src/lib/utilities.ts`** contains generic helpers with no site-specific logic, including `buildThumbnailUrl` (ANF aspect-ratio clamping) and `IMAGE_TARGET_WIDTHS`.
 
@@ -80,7 +78,7 @@ The **Entry Editor** tab exposes per-publish metadata toggles:
 - **Candidate to be featured** — marks the article as a candidate for Apple News editorial featuring.
 - **Sponsored content** — flags the article as sponsored.
 
-Entry-derived metadata (maturity rating, links, etc.) is resolved from the entry fields via `resolveArticleMetadata` in `conventions.ts`; the UI toggles override the resolved values for the current publish.
+Entry-derived metadata (maturity rating, links, etc.) is resolved from the entry fields via `resolveArticleMetadata` in `site.ts`; the UI toggles override the resolved values for the current publish.
 
 ### Automatic cleanup on unpublish/archive
 

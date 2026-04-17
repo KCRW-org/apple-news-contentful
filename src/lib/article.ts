@@ -1,6 +1,6 @@
 import type { AnfComponent, AnfDocument, AppInstallationParameters, ResolvedStory } from '../types';
 import { richTextToComponents } from './richText';
-import { formatByline, authorNames, renderAfterBody, ARTICLE_BASE } from './conventions';
+import { siteConfig } from './site';
 import { mergeDeep, stripMarkdown } from './utilities';
 
 // ── Builder ───────────────────────────────────────────────────────────────────
@@ -14,19 +14,19 @@ export function buildArticle(
   story: ResolvedStory,
   params: AppInstallationParameters,
 ): AnfDocument {
-  const base = mergeDeep({}, ARTICLE_BASE as unknown as Record<string, unknown>) as typeof ARTICLE_BASE;
+  const base = mergeDeep({}, siteConfig.articleBase as unknown as Record<string, unknown>) as typeof siteConfig.articleBase;
   const components: AnfComponent[] = buildComponents(story, params);
 
   const metadata: Record<string, unknown> = { ...((base.metadata ?? {}) as object) };
   if (story.description) metadata.excerpt = stripMarkdown(story.description);
   if (story.thumbnailUrl) metadata.thumbnailURL = story.thumbnailUrl;
   if (story.canonicalUrl) metadata.canonicalURL = story.canonicalUrl;
-  const authors = authorNames(story.people, story.bylineCount);
+  const authors = siteConfig.authorNames(story.people, story.bylineCount);
   if (authors.length > 0) metadata.authors = authors;
 
   let doc: AnfDocument = {
     ...base,
-    version: ARTICLE_BASE.version,
+    version: siteConfig.articleBase.version,
     identifier: entryId,
     title: story.title,
     language: 'en-US',
@@ -64,7 +64,7 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
     });
   }
   headerChildren.push({ role: 'title', text: story.title, layout: 'titleLayout', style: 'titleStyle' });
-  const bylineText = formatByline(story.people, story.bylineDate, story.categoryTitle, story.bylineCount);
+  const bylineText = siteConfig.formatByline(story.people, story.bylineDate, story.categoryTitle, story.bylineCount);
   if (bylineText) {
     headerChildren.push({ role: 'byline', text: bylineText, layout: 'bylineLayout', style: 'bylineStyle' });
   }
@@ -126,7 +126,7 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
   }
 
   // 6. After-body content (credits, corrections; hook for future additions).
-  components.push(...renderAfterBody({ story, canonicalUrlTemplate: params.canonicalUrlTemplate ?? '' }));
+  components.push(...siteConfig.renderAfterBody({ story, canonicalUrlTemplate: params.canonicalUrlTemplate ?? '' }));
 
   // 7. Footer
   if (params.footerText) {
