@@ -74,7 +74,7 @@ function buildComponents(story: ResolvedStory, params: AppInstallationParameters
   if (story.audio) {
     components.push({
       role: 'audio',
-      audioURL: story.audio.url,
+      URL: story.audio.url,
       layout: 'headerAudioLayout',
       style: 'headerAudioStyle',
     });

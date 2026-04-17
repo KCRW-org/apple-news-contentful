@@ -72,7 +72,9 @@ export function richTextToComponents(
       items.push({ kind: 'heading', level: 6, text: inlinesToHtml((node as Block).content, linkMap) });
     } else if (node.nodeType === BLOCKS.QUOTE) {
       flushTextBatch();
-      const text = inlinesToHtml((node as Block).content, linkMap);
+      const text = (node as Block).content
+        .map(child => inlinesToHtml((child as Block).content, linkMap))
+        .join('');
       items.push({ kind: 'quote', text });
     } else if (node.nodeType === BLOCKS.HR) {
       flushTextBatch();
@@ -181,7 +183,7 @@ function embedToComponent(
   if (embed.type === 'audio') {
     const c: AnfComponent = {
       role: 'audio',
-      audioURL: embed.url,
+      URL: embed.url,
       layout: 'bodyAudioEmbed',
       style: 'bodyAudioEmbedStyle',
     };
@@ -204,13 +206,21 @@ export function nodeToHtml(
     case BLOCKS.PARAGRAPH:
       return `<p>${inlinesToHtml(node.content, linkMap)}</p>`;
     case BLOCKS.UL_LIST:
-      return `<ul>${node.content.map(li => `<li>${inlinesToHtml((li as Block).content, linkMap)}</li>`).join('')}</ul>`;
+      return `<ul>${node.content.map(li => `<li>${listItemInner(li as Block, linkMap)}</li>`).join('')}</ul>`;
     case BLOCKS.OL_LIST:
-      return `<ol>${node.content.map(li => `<li>${inlinesToHtml((li as Block).content, linkMap)}</li>`).join('')}</ol>`;
+      return `<ol>${node.content.map(li => `<li>${listItemInner(li as Block, linkMap)}</li>`).join('')}</ol>`;
     default:
       // Unrecognized block — render children as a paragraph
       return `<p>${inlinesToHtml(node.content, linkMap)}</p>`;
   }
+}
+
+function listItemInner(li: Block, linkMap: Map<string, string | null>): string {
+  const children = li.content as Block[];
+  if (children.length === 1 && children[0].nodeType === BLOCKS.PARAGRAPH) {
+    return inlinesToHtml(children[0].content, linkMap);
+  }
+  return children.map(c => nodeToHtml(c as Block, linkMap)).join('');
 }
 
 function inlinesToHtml(

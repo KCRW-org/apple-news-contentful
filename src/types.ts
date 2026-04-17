@@ -10,6 +10,8 @@ export type AppInstallationParameters = {
   canonicalUrlTemplate?: string;
   locale?: string;
   articleCustomizationsJson?: string;
+  /** JSON map of Contentful category entry ID → Apple News section ID. */
+  sectionMappingJson?: string;
   footerText?: string;
 };
 
@@ -155,6 +157,8 @@ export type ResolvedStory = {
   bylineCount: number;
   /** First category's title (from categoriesCollection[0].title), shown at the end of the byline. */
   categoryTitle: string | null;
+  /** All linked category entry IDs — used to resolve Apple News sections from the config mapping. */
+  categoryIds: string[];
   leadImage: ResolvedImage | null;
   /** Thumbnail URL for Apple News feed tiles — lead image at thumb size, or show image if no lead image. */
   thumbnailUrl: string | null;

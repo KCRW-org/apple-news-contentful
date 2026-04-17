@@ -231,6 +231,8 @@ export type ArticleMetadataOptions = {
   isCandidateToBeFeatured?: boolean;
   isSponsored?: boolean;
   maturityRating?: string | null;
+  /** Full Apple News section URLs (e.g. `https://news-api.apple.com/channels/{ch}/sections/{s}`). */
+  sections?: string[];
 };
 
 /** Builds the metadata `data` object from options, omitting unset fields. */
@@ -240,6 +242,7 @@ function buildMetadataFields(options: ArticleMetadataOptions | undefined): Recor
   if (options?.isCandidateToBeFeatured !== undefined) fields.isCandidateToBeFeatured = options.isCandidateToBeFeatured;
   if (options?.isSponsored !== undefined) fields.isSponsored = options.isSponsored;
   if (options?.maturityRating !== undefined) fields.maturityRating = options.maturityRating;
+  if (options?.sections && options.sections.length > 0) fields.links = { sections: options.sections };
   return fields;
 }
 

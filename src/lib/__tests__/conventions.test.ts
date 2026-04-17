@@ -24,6 +24,7 @@ const makeStory = (overrides: Partial<ResolvedStory> = {}): ResolvedStory => ({
   bylineDate: null,
   bylineCount: 1,
   categoryTitle: null,
+  categoryIds: [],
   leadImage: null,
   thumbnailUrl: null,
   canonicalUrl: null,
@@ -199,20 +200,55 @@ describe('formatByline — separators', () => {
 
 describe('renderAfterBody — credits block', () => {
   const template = 'https://www.kcrw.com/path';
+  // Credits are wrapped in a single container; extract its children for inspection.
+  const creditsContainer = (comps: ReturnType<typeof renderAfterBody>) =>
+    comps.find(c => (c as any).identifier === 'credits') as any;
+  const creditsChildren = (comps: ReturnType<typeof renderAfterBody>): any[] =>
+    creditsContainer(comps)?.components ?? [];
+  const allText = (comps: ReturnType<typeof renderAfterBody>) =>
+    creditsChildren(comps).map((c: any) => c.text as string ?? '').join('');
 
   it('returns an empty array when no people are present and no corrections', () => {
     expect(renderAfterBody({ story: makeStory(), canonicalUrlTemplate: template })).toEqual([]);
   });
 
-  it('omits categories with no people', () => {
+  it('wraps credits in a container with identifier "credits"', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
     const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('Host(s):');
-    expect(html).not.toContain('Guest(s):');
-    expect(html).not.toContain('Producer(s):');
+    const container = creditsContainer(components);
+    expect(container).toBeDefined();
+    expect(container.role).toBe('container');
+  });
+
+  it('starts with a heading3 "Credits" component inside the container', () => {
+    const people = emptyPeople();
+    people.hosts = [person({ name: 'Alex', slug: 'alex' })];
+    const children = creditsChildren(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(children[0].role).toBe('heading3');
+    expect(children[0].text).toBe('Credits');
+  });
+
+  it('omits roles with no people', () => {
+    const people = emptyPeople();
+    people.hosts = [person({ name: 'Alex', slug: 'alex' })];
+    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
+    const text = allText(components);
+    expect(text).toContain('Hosts');
+    expect(text).not.toContain('Guests');
+    expect(text).not.toContain('Producers');
+  });
+
+  it('renders each role as a heading4 followed by a body with ul', () => {
+    const people = emptyPeople();
+    people.guests = [person({ name: 'Dr. Jane', title: 'Historian', slug: 'jane' })];
+    const children = creditsChildren(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    const h4 = children.find((c: any) => c.role === 'heading4');
+    expect(h4).toBeDefined();
+    expect(h4.text).toBe('Guests');
+    const body = children.find((c: any) => c.role === 'body' && c.text?.includes('<ul>'));
+    expect(body).toBeDefined();
+    expect(body.text).toContain('<li><a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian</li>');
   });
 
   it('renders guest titles with " - " separator when present', () => {
@@ -221,63 +257,45 @@ describe('renderAfterBody — credits block', () => {
       person({ name: 'Dr. Jane', title: 'Historian', slug: 'jane' }),
       person({ name: 'Bob', title: null, slug: 'bob' }),
     ];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('Guest(s): <a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian');
-    expect(html).toContain('<a href="https://www.kcrw.com/people/bob">Bob</a>');
-    expect(html).not.toMatch(/<a [^>]*>Bob<\/a> - /);
+    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian</li>');
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/bob">Bob</a></li>');
+    expect(text).not.toMatch(/<a [^>]*>Bob<\/a> - /);
   });
 
   it('omits title from Host(s) / Producer(s) even when the person has one', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', title: 'Senior Host', slug: 'alex' })];
     people.producers = [person({ name: 'Sam', title: 'EP', slug: 'sam' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('Host(s): <a href="https://www.kcrw.com/people/alex">Alex</a></p>');
-    expect(html).toContain('Producer(s): <a href="https://www.kcrw.com/people/sam">Sam</a></p>');
-    expect(html).not.toContain('Senior Host');
-    expect(html).not.toContain('EP');
+    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/sam">Sam</a></li>');
+    expect(text).not.toContain('Senior Host');
+    expect(text).not.toContain('EP');
   });
 
   it('renders plain text when a person has no slug', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: null })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('Host(s): Alex');
-    expect(html).not.toContain('<a ');
+    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(text).toContain('<li>Alex</li>');
+    expect(text).not.toContain('<a ');
   });
 
-  it('separates multiple people in the same category with "; "', () => {
+  it('renders each person as a separate li', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' }), person({ name: 'Jordan', slug: 'jordan' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('<a href="https://www.kcrw.com/people/alex">Alex</a>; <a href="https://www.kcrw.com/people/jordan">Jordan</a>');
-  });
-
-  it('emits a leading "Credits:" label above the people lines', () => {
-    const people = emptyPeople();
-    people.hosts = [person({ name: 'Alex', slug: 'alex' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html.startsWith('<p><strong>Credits:</strong></p>')).toBe(true);
+    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/jordan">Jordan</a></li>');
   });
 
   it('escapes HTML-unsafe characters in names and titles', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Jane <script>', title: 'Role & More', slug: 'jane' })];
-    const components = renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template });
-    const credits = components.find(c => (c as any).identifier === 'credits');
-    const html = (credits as any).text as string;
-    expect(html).toContain('Jane &lt;script&gt;');
-    expect(html).toContain('Role &amp; More');
+    const text = allText(renderAfterBody({ story: makeStory({ people }), canonicalUrlTemplate: template }));
+    expect(text).toContain('Jane &lt;script&gt;');
+    expect(text).toContain('Role &amp; More');
   });
 });
 
@@ -300,8 +318,9 @@ describe('renderAfterBody — corrections', () => {
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
     const story = makeStory({ people, corrections: 'Fix' });
     const components = renderAfterBody({ story, canonicalUrlTemplate: template });
-    const ids = components.map(c => (c as any).identifier);
-    expect(ids).toEqual(['corrections', 'credits']);
+    const ids = components.map(c => (c as any).identifier).filter(Boolean);
+    expect(ids[0]).toBe('corrections');
+    expect(ids[1]).toBe('credits');
   });
 });
 

@@ -173,6 +173,31 @@ describe('resolveStory', () => {
     expect(story.categoryTitle).toBe('News');
   });
 
+  it('collects all category entry IDs into categoryIds', async () => {
+    const source = makeSource({
+      entry1: {
+        id: 'entry1',
+        contentType: 'Story',
+        fields: {
+          title: 'Title',
+          categories: [{ sys: { id: 'cat-1' } }, { sys: { id: 'cat-2' } }],
+        },
+      },
+      'cat-1': { id: 'cat-1', contentType: 'category', fields: { title: 'News' } },
+      'cat-2': { id: 'cat-2', contentType: 'category', fields: { title: 'Culture' } },
+    });
+    const story = await resolveStory('entry1', baseParams, source);
+    expect(story.categoryIds).toEqual(['cat-1', 'cat-2']);
+  });
+
+  it('returns empty categoryIds when no categories are linked', async () => {
+    const source = makeSource({
+      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'Title' } },
+    });
+    const story = await resolveStory('entry1', baseParams, source);
+    expect(story.categoryIds).toEqual([]);
+  });
+
   it('resolves corrections field', async () => {
     const source = makeSource({
       entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'T', corrections: 'A correction was made.' } },

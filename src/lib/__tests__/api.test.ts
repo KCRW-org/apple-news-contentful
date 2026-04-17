@@ -79,6 +79,48 @@ describe('buildMultipartBody', () => {
   });
 });
 
+describe('sections metadata', () => {
+  const credentials = { apiKeyId: 'k', apiKeySecret: 'dGVzdA==', channelId: 'chan' };
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('includes links.sections in the metadata part when sections are provided', async () => {
+    const successBody = { data: { id: 'art-1', revision: 'rev-1', shareUrl: 'https://apple.news/art-1' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => JSON.stringify(successBody),
+    }) as unknown as typeof fetch;
+
+    await createArticle({ version: '1.7' }, credentials, {
+      sections: ['https://news-api.apple.com/sections/sec1'],
+    });
+
+    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = call[1].body as string;
+    expect(body).toContain('"links"');
+    expect(body).toContain('"sections"');
+    expect(body).toContain('sec1');
+  });
+
+  it('omits links.sections from metadata when sections is empty', async () => {
+    const successBody = { data: { id: 'art-1', revision: 'rev-1', shareUrl: 'https://apple.news/art-1' } };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => JSON.stringify(successBody),
+    }) as unknown as typeof fetch;
+
+    await createArticle({ version: '1.7' }, credentials, { sections: [] });
+
+    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = call[1].body as string;
+    expect(body).not.toContain('"links"');
+  });
+});
+
 describe('AppleNewsApiError', () => {
   const credentials = { apiKeyId: 'k', apiKeySecret: 'dGVzdA==', channelId: 'chan' };
   const originalFetch = global.fetch;

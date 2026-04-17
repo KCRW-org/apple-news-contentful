@@ -32,9 +32,26 @@ function parseJsonError(value: string, e: SyntaxError): string {
 const ConfigScreen = () => {
   const [parameters, setParameters] = useState<AppInstallationParameters>({});
   const [customizationsError, setCustomizationsError] = useState<string | null>(null);
+  const [sectionMappingError, setSectionMappingError] = useState<string | null>(null);
   const sdk = useSDK<ConfigAppSDK>();
 
   const onConfigure = useCallback(async () => {
+    let blocked = false;
+    if (parameters.articleCustomizationsJson?.trim()) {
+      try { JSON.parse(parameters.articleCustomizationsJson); }
+      catch (err) {
+        setCustomizationsError(parseJsonError(parameters.articleCustomizationsJson, err as SyntaxError));
+        blocked = true;
+      }
+    }
+    if (parameters.sectionMappingJson?.trim()) {
+      try { JSON.parse(parameters.sectionMappingJson); }
+      catch (err) {
+        setSectionMappingError(parseJsonError(parameters.sectionMappingJson, err as SyntaxError));
+        blocked = true;
+      }
+    }
+    if (blocked) return false;
     const currentState = await sdk.app.getCurrentState();
     return { parameters, targetState: currentState };
   }, [parameters, sdk]);
@@ -204,6 +221,36 @@ const ConfigScreen = () => {
           </FormControl.HelpText>
           {customizationsError && (
             <FormControl.ValidationMessage>{customizationsError}</FormControl.ValidationMessage>
+          )}
+        </FormControl>
+
+        <FormControl isInvalid={sectionMappingError !== null}>
+          <FormControl.Label>Section Mapping (JSON)</FormControl.Label>
+          <Textarea
+            value={parameters.sectionMappingJson ?? ''}
+            name="sectionMappingJson"
+            rows={4}
+            onChange={e => {
+              updateParam('sectionMappingJson')(e);
+              if (sectionMappingError) {
+                try { JSON.parse(e.target.value); setSectionMappingError(null); } catch { /* still invalid */ }
+              }
+            }}
+            onBlur={e => {
+              const value = e.target.value.trim();
+              if (!value) { setSectionMappingError(null); return; }
+              try { JSON.parse(value); setSectionMappingError(null); }
+              catch (err) { setSectionMappingError(parseJsonError(value, err as SyntaxError)); }
+            }}
+            placeholder='{"categoryEntryId":"appleSectionId"}'
+          />
+          <FormControl.HelpText>
+            Maps Contentful category entry IDs to Apple News section IDs.
+            Use an empty-string key (<code>{'"":"sectionId"'}</code>) for a default
+            section that applies to every article. Unmapped categories are ignored.
+          </FormControl.HelpText>
+          {sectionMappingError && (
+            <FormControl.ValidationMessage>{sectionMappingError}</FormControl.ValidationMessage>
           )}
         </FormControl>
       </Form>

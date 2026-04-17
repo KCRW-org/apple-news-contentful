@@ -81,7 +81,7 @@ describe('richTextToComponents', () => {
     const components = richTextToComponents(doc, embedMap, new Map());
     expect(components).toHaveLength(1);
     expect(components[0].role).toBe('audio');
-    expect(components[0].audioURL).toBe('https://audio.example.com/ep.mp3');
+    expect(components[0].URL).toBe('https://audio.example.com/ep.mp3');
   });
 
   it('omits unresolved block embeds entirely (Apple News rejects paragraphs with no text content)', () => {
@@ -130,6 +130,149 @@ describe('richTextToComponents', () => {
   });
 });
 
+const listItem = (...inlineNodes: unknown[]) => ({
+  nodeType: BLOCKS.LIST_ITEM,
+  data: {},
+  content: [{
+    nodeType: BLOCKS.PARAGRAPH,
+    data: {},
+    content: inlineNodes,
+  }],
+});
+
+const textNode = (value: string, ...marks: string[]) => ({
+  nodeType: 'text',
+  value,
+  marks: marks.map(type => ({ type })),
+  data: {},
+});
+
+describe('nodeToHtml — lists', () => {
+  it('renders an unordered list as <ul><li>', () => {
+    const node = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [
+        listItem(textNode('First')),
+        listItem(textNode('Second')),
+      ],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ul><li>First</li><li>Second</li></ul>');
+  });
+
+  it('renders an ordered list as <ol><li>', () => {
+    const node = {
+      nodeType: BLOCKS.OL_LIST,
+      data: {},
+      content: [listItem(textNode('One')), listItem(textNode('Two'))],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ol><li>One</li><li>Two</li></ol>');
+  });
+
+  it('renders inline formatting inside list items', () => {
+    const node = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [listItem(textNode('bold', 'bold'), textNode(' normal'))],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ul><li><strong>bold</strong> normal</li></ul>');
+  });
+
+  it('renders hyperlinks inside list items', () => {
+    const node = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.LIST_ITEM,
+        data: {},
+        content: [{
+          nodeType: BLOCKS.PARAGRAPH,
+          data: {},
+          content: [{
+            nodeType: INLINES.HYPERLINK,
+            data: { uri: 'https://example.com' },
+            content: [textNode('Link')],
+          }],
+        }],
+      }],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ul><li><a href="https://example.com">Link</a></li></ul>');
+  });
+
+  it('renders multi-paragraph list items using nodeToHtml on each child', () => {
+    const node = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.LIST_ITEM,
+        data: {},
+        content: [
+          { nodeType: BLOCKS.PARAGRAPH, data: {}, content: [textNode('First para')] },
+          { nodeType: BLOCKS.PARAGRAPH, data: {}, content: [textNode('Second para')] },
+        ],
+      }],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ul><li><p>First para</p><p>Second para</p></li></ul>');
+  });
+
+  it('renders nested lists', () => {
+    const nestedList = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [listItem(textNode('Nested'))],
+    };
+    const node = {
+      nodeType: BLOCKS.UL_LIST,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.LIST_ITEM,
+        data: {},
+        content: [
+          { nodeType: BLOCKS.PARAGRAPH, data: {}, content: [textNode('Parent')] },
+          nestedList,
+        ],
+      }],
+    };
+    const html = nodeToHtml(node as any, new Map());
+    expect(html).toBe('<ul><li><p>Parent</p><ul><li>Nested</li></ul></li></ul>');
+  });
+});
+
+describe('nodeToHtml — inline marks', () => {
+  it('renders underline as <span data-anf-textstyle="style-underline">', () => {
+    const node = {
+      nodeType: BLOCKS.PARAGRAPH,
+      data: {},
+      content: [textNode('underlined', 'underline')],
+    };
+    expect(nodeToHtml(node as any, new Map())).toBe('<p><span data-anf-textstyle="style-underline">underlined</span></p>');
+  });
+
+  it('renders code mark as <code>', () => {
+    const node = {
+      nodeType: BLOCKS.PARAGRAPH,
+      data: {},
+      content: [textNode('const x = 1', 'code')],
+    };
+    expect(nodeToHtml(node as any, new Map())).toBe('<p><code>const x = 1</code></p>');
+  });
+
+  it('escapes HTML-unsafe characters in text', () => {
+    const node = {
+      nodeType: BLOCKS.PARAGRAPH,
+      data: {},
+      content: [textNode('<script>alert("xss")</script>')],
+    };
+    expect(nodeToHtml(node as any, new Map())).toContain('&lt;script&gt;');
+    expect(nodeToHtml(node as any, new Map())).not.toContain('<script>');
+  });
+});
+
 describe('nodeToHtml', () => {
   it('renders bold mark as <strong>', () => {
     const node = {
@@ -163,6 +306,144 @@ describe('nodeToHtml', () => {
     };
     const html = nodeToHtml(node as any, new Map());
     expect(html).toContain('<a href="https://example.com">Link</a>');
+  });
+});
+
+describe('richTextToComponents — headings', () => {
+  it('emits h2 as a separate heading2 ANF component', () => {
+    const doc = makeDoc(
+      paragraph('Before'),
+      {
+        nodeType: BLOCKS.HEADING_2,
+        data: {},
+        content: [{ nodeType: 'text', value: 'Section Title', marks: [], data: {} }],
+      },
+      paragraph('After'),
+    );
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(3);
+    expect(components[0].role).toBe('body');
+    expect(components[1].role).toBe('heading2');
+    expect(components[1].text).toBe('Section Title');
+    expect(components[1].format).toBe('html');
+    expect(components[1].textStyle).toBe('default-heading2');
+    expect(components[2].role).toBe('body');
+  });
+
+  it('preserves inline formatting in headings', () => {
+    const doc = makeDoc({
+      nodeType: BLOCKS.HEADING_3,
+      data: {},
+      content: [
+        { nodeType: 'text', value: 'Bold ', marks: [{ type: 'bold' }], data: {} },
+        { nodeType: 'text', value: 'heading', marks: [], data: {} },
+      ],
+    });
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(1);
+    expect(components[0].role).toBe('heading3');
+    expect(components[0].text).toBe('<strong>Bold </strong>heading');
+  });
+
+  it('renders all six heading levels with correct roles', () => {
+    const headings = [1, 2, 3, 4, 5, 6].map(level => ({
+      nodeType: `heading-${level}`,
+      data: {},
+      content: [{ nodeType: 'text', value: `H${level}`, marks: [], data: {} }],
+    }));
+    const doc = makeDoc(...headings);
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(6);
+    for (let i = 0; i < 6; i++) {
+      expect(components[i].role).toBe(`heading${i + 1}`);
+      expect(components[i].text).toBe(`H${i + 1}`);
+    }
+  });
+
+  it('heading between paragraphs splits text batches', () => {
+    const doc = makeDoc(
+      paragraph('Para 1'),
+      paragraph('Para 2'),
+      {
+        nodeType: BLOCKS.HEADING_2,
+        data: {},
+        content: [{ nodeType: 'text', value: 'Title', marks: [], data: {} }],
+      },
+      paragraph('Para 3'),
+    );
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(3);
+    expect(components[0].role).toBe('body');
+    expect(components[0].id).toBe('body-section-1');
+    expect((components[0].text as string)).toContain('Para 1');
+    expect((components[0].text as string)).toContain('Para 2');
+    expect(components[1].role).toBe('heading2');
+    expect(components[2].role).toBe('body');
+    expect(components[2].id).toBe('body-section-2');
+  });
+
+  it('renders hyperlinks inside headings', () => {
+    const doc = makeDoc({
+      nodeType: BLOCKS.HEADING_2,
+      data: {},
+      content: [{
+        nodeType: INLINES.HYPERLINK,
+        data: { uri: 'https://example.com' },
+        content: [{ nodeType: 'text', value: 'Link', marks: [], data: {} }],
+      }],
+    });
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components[0].text).toBe('<a href="https://example.com">Link</a>');
+  });
+});
+
+describe('richTextToComponents — blockquotes', () => {
+  it('emits a blockquote as a pullquote ANF component', () => {
+    const doc = makeDoc({
+      nodeType: BLOCKS.QUOTE,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.PARAGRAPH,
+        data: {},
+        content: [{ nodeType: 'text', value: 'A wise quote', marks: [], data: {} }],
+      }],
+    });
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(1);
+    expect(components[0].role).toBe('pullquote');
+    expect(components[0].text).toContain('A wise quote');
+    expect(components[0].format).toBe('html');
+  });
+
+  it('preserves inline formatting in blockquotes', () => {
+    const doc = makeDoc({
+      nodeType: BLOCKS.QUOTE,
+      data: {},
+      content: [{
+        nodeType: BLOCKS.PARAGRAPH,
+        data: {},
+        content: [
+          { nodeType: 'text', value: 'emphasis', marks: [{ type: 'italic' }], data: {} },
+          { nodeType: 'text', value: ' here', marks: [], data: {} },
+        ],
+      }],
+    });
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components[0].text).toContain('<em>emphasis</em>');
+    expect(components[0].text).toContain(' here');
+  });
+});
+
+describe('richTextToComponents — dividers', () => {
+  it('emits an HR as a divider component', () => {
+    const doc = makeDoc(
+      paragraph('Before'),
+      { nodeType: BLOCKS.HR, data: {}, content: [] },
+      paragraph('After'),
+    );
+    const components = richTextToComponents(doc, new Map(), new Map());
+    expect(components).toHaveLength(3);
+    expect(components[1].role).toBe('divider');
   });
 });
 

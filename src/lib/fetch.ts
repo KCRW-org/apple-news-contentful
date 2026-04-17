@@ -63,6 +63,8 @@ export async function resolveStory(
   const guests = resolvePeople(fields, FIELD_NAMES.guestsCollection, entriesById, warnings, 'guest');
   const showTitle = resolveFirstCollectionTitle(fields, FIELD_NAMES.showsCollection, entriesById, warnings, 'show');
   const categoryTitle = resolveFirstCollectionTitle(fields, FIELD_NAMES.categoriesCollection, entriesById, warnings, 'category');
+  const categoryLinks = (fields[FIELD_NAMES.categoriesCollection] as { sys: { id: string } }[] | undefined) ?? [];
+  const categoryIds = categoryLinks.map(l => l.sys.id);
   const leadImage = imageLink ? resolveImageEntry(imageLink.sys.id, entriesById, assetsById, warnings, 'Lead image', 'lead') : null;
 
   // Canonical URL: derive from the story's own slug + parent show/section.
@@ -119,6 +121,7 @@ export async function resolveStory(
     bylineDate,
     bylineCount,
     categoryTitle,
+    categoryIds,
     leadImage,
     thumbnailUrl,
     canonicalUrl,

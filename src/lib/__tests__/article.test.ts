@@ -11,6 +11,7 @@ const minimalStory: ResolvedStory = {
   bylineDate: '2024-01-01',
   bylineCount: 1,
   categoryTitle: null,
+  categoryIds: [],
   leadImage: null,
   thumbnailUrl: null,
   canonicalUrl: null,

@@ -270,9 +270,29 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
     const articleJson = buildArticle(entryId, story, params);
 
     const entryMetadata = resolveArticleMetadata(story);
+
+    // Resolve Apple News sections from the config mapping + entry's category IDs.
+    // An empty-string key ("") in the mapping is the default section, always included.
+    let sections: string[] | undefined;
+    if (params.sectionMappingJson) {
+      try {
+        const mapping = JSON.parse(params.sectionMappingJson) as Record<string, string>;
+        const toUrl = (sid: string) => `https://news-api.apple.com/sections/${sid}`;
+        const sectionUrls: string[] = [];
+        const defaultSid = mapping[''];
+        if (defaultSid) sectionUrls.push(toUrl(defaultSid));
+        for (const catId of story.categoryIds) {
+          const sid = mapping[catId];
+          if (sid && sid !== defaultSid) sectionUrls.push(toUrl(sid));
+        }
+        if (sectionUrls.length > 0) sections = sectionUrls;
+      } catch { /* invalid JSON — silently skip */ }
+    }
+
     const metadataOptions: ArticleMetadataOptions = {
       ...entryMetadata,
       isPreview,
+      sections,
       // UI selections override entry-derived values
       ...(options.isCandidateToBeFeatured !== undefined ? { isCandidateToBeFeatured: options.isCandidateToBeFeatured } : undefined),
       ...(options.isSponsored !== undefined ? { isSponsored: options.isSponsored } : undefined),

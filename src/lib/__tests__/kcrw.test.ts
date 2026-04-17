@@ -1,8 +1,8 @@
 // Tests for KCRW-specific logic that lives in kcrw.ts:
-// selectBylinePeople, renderCreditsComponent, urlWithParent.
+// selectBylinePeople, renderCreditsComponents, urlWithParent.
 
 import { describe, it, expect } from 'vitest';
-import { selectBylinePeople, renderCreditsComponent, urlWithParent } from '../kcrw';
+import { selectBylinePeople, renderCreditsComponents, urlWithParent } from '../kcrw';
 import type { ResolvedPeople, ResolvedPerson, EntryUrlInput } from '../../types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,64 +59,82 @@ describe('selectBylinePeople', () => {
   });
 });
 
-// ── renderCreditsComponent ───────────────────────────────────────────────────
+// ── renderCreditsComponents ──────────────────────────────────────────────────
 
-describe('renderCreditsComponent', () => {
+describe('renderCreditsComponents', () => {
   const template = 'https://www.kcrw.com/some/path';
+  const innerComps = (comps: ReturnType<typeof renderCreditsComponents>) =>
+    (comps[0]?.components ?? []) as AnfComponent[];
+  const allText = (comps: ReturnType<typeof renderCreditsComponents>) =>
+    innerComps(comps).map(c => c.text as string ?? '').join('');
 
-  it('returns null when no people are present', () => {
-    expect(renderCreditsComponent(emptyPeople(), template)).toBeNull();
+  it('returns empty array when no people are present', () => {
+    expect(renderCreditsComponents(emptyPeople(), template)).toEqual([]);
   });
 
-  it('includes a "Credits:" label', () => {
+  it('wraps everything in a single container with identifier "credits"', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' })];
-    const comp = renderCreditsComponent(people, template)!;
-    expect((comp.text as string).startsWith('<p><strong>Credits:</strong></p>')).toBe(true);
+    const comps = renderCreditsComponents(people, template);
+    expect(comps).toHaveLength(1);
+    expect(comps[0].role).toBe('container');
+    expect(comps[0].identifier).toBe('credits');
   });
 
-  it('includes guests with title and link', () => {
+  it('starts with a heading3 "Credits" component inside the container', () => {
+    const people = emptyPeople();
+    people.hosts = [person({ name: 'Alex', slug: 'alex' })];
+    const children = innerComps(renderCreditsComponents(people, template));
+    expect(children[0].role).toBe('heading3');
+    expect(children[0].text).toBe('Credits');
+  });
+
+  it('renders each role as a heading4 followed by a body with ul', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Dr. Jane', title: 'Historian', slug: 'jane' })];
-    const html = renderCreditsComponent(people, template)!.text as string;
-    expect(html).toContain('Guest(s): <a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian');
+    const children = innerComps(renderCreditsComponents(people, template));
+    expect(children[1].role).toBe('heading4');
+    expect(children[1].text).toBe('Guests');
+    expect(children[2].role).toBe('body');
+    expect(children[2].text).toContain('<ul><li><a href="https://www.kcrw.com/people/jane">Dr. Jane</a> - Historian</li></ul>');
   });
 
   it('omits title from hosts even when present', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', title: 'Senior Host', slug: 'alex' })];
-    const html = renderCreditsComponent(people, template)!.text as string;
-    expect(html).toContain('Host(s): <a href="https://www.kcrw.com/people/alex">Alex</a>');
-    expect(html).not.toContain('Senior Host');
+    const text = allText(renderCreditsComponents(people, template));
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
+    expect(text).not.toContain('Senior Host');
   });
 
   it('renders plain text when person has no slug', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: null })];
-    const html = renderCreditsComponent(people, template)!.text as string;
-    expect(html).toContain('Host(s): Alex');
-    expect(html).not.toContain('<a ');
+    const text = allText(renderCreditsComponents(people, template));
+    expect(text).toContain('<li>Alex</li>');
+    expect(text).not.toContain('<a ');
   });
 
-  it('separates multiple people with "; "', () => {
+  it('renders each person as a separate li', () => {
     const people = emptyPeople();
     people.hosts = [person({ name: 'Alex', slug: 'alex' }), person({ name: 'Jordan', slug: 'jordan' })];
-    const html = renderCreditsComponent(people, template)!.text as string;
-    expect(html).toContain('Alex</a>; <a');
+    const text = allText(renderCreditsComponents(people, template));
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/alex">Alex</a></li>');
+    expect(text).toContain('<li><a href="https://www.kcrw.com/people/jordan">Jordan</a></li>');
   });
 
   it('escapes HTML-unsafe characters in names and titles', () => {
     const people = emptyPeople();
     people.guests = [person({ name: 'Jane <script>', title: 'Role & More', slug: 'jane' })];
-    const html = renderCreditsComponent(people, template)!.text as string;
-    expect(html).toContain('Jane &lt;script&gt;');
-    expect(html).toContain('Role &amp; More');
+    const text = allText(renderCreditsComponents(people, template));
+    expect(text).toContain('Jane &lt;script&gt;');
+    expect(text).toContain('Role &amp; More');
   });
 
-  it('returns null when only reporters are present (not listed in credits)', () => {
+  it('returns empty array when only reporters are present (not listed in credits)', () => {
     const people = emptyPeople();
     people.reporters = [person({ name: 'Jane' })];
-    expect(renderCreditsComponent(people, template)).toBeNull();
+    expect(renderCreditsComponents(people, template)).toEqual([]);
   });
 });
 

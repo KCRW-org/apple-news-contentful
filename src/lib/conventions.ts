@@ -9,7 +9,7 @@
 import { DateTime } from 'luxon';
 import type { AnfComponent, ResolvedImage, ResolvedMediaLink, ResolvedPeople, ResolvedStory, ImageRole, AfterBodyContext, ResolvedParent, ParentLookupEntry, ArticleMetadata, EntryUrlInput } from '../types';
 import { friendlyStringJoin, escapeHtml, mergeDeep, resolveAssetInfo, IMAGE_TARGET_WIDTHS, type ContentfulAssetFields } from './utilities';
-import { selectBylinePeople, renderCreditsComponent, urlWithParent, KCRW_OVERRIDES } from './kcrw';
+import { selectBylinePeople, renderCreditsComponents, urlWithParent, KCRW_OVERRIDES } from './kcrw';
 
 export type { ImageRole, AfterBodyContext, ResolvedParent, ParentLookupEntry, ArticleMetadata, EntryUrlInput };
 
@@ -230,8 +230,7 @@ export function renderAfterBody(ctx: AfterBodyContext): AnfComponent[] {
     });
   }
 
-  const credits = renderCreditsComponent(ctx.story.people, ctx.canonicalUrlTemplate);
-  if (credits) components.push(credits);
+  components.push(...renderCreditsComponents(ctx.story.people, ctx.canonicalUrlTemplate));
 
   return components;
 }

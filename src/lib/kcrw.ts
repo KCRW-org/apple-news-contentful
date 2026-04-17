@@ -24,43 +24,70 @@ export function selectBylinePeople(people: ResolvedPeople): { prefix: string; na
 // ── Credits helpers ───────────────────────────────────────────────────────────
 
 /**
- * Builds the Credits body component, or returns null if there are no guests, hosts, or producers.
+ * Builds Credits as separate ANF components: an h3 heading, then for each role
+ * an h4 heading + body with a <ul> of contributors.
  * Reporters aren't listed in credits — they're already named in the byline.
  */
-export function renderCreditsComponent(people: ResolvedPeople, canonicalUrlTemplate: string): AnfComponent | null {
+export function renderCreditsComponents(people: ResolvedPeople, canonicalUrlTemplate: string): AnfComponent[] {
   const base = canonicalUrlTemplate ? new URL(canonicalUrlTemplate).origin : '';
 
-  const guestLine   = peopleLine('Guest(s)',    people.guests,    base, { includeTitle: true });
-  const hostLine    = peopleLine('Host(s)',     people.hosts,     base, { includeTitle: false });
-  const producerLine = peopleLine('Producer(s)', people.producers, base, { includeTitle: false });
+  const roleSections = [
+    peopleComponents('Guests',    people.guests,    base, { includeTitle: true }),
+    peopleComponents('Hosts',     people.hosts,     base, { includeTitle: false }),
+    peopleComponents('Producers', people.producers, base, { includeTitle: false }),
+  ].flat();
+  if (roleSections.length === 0) return [];
 
-  const lines = [guestLine, hostLine, producerLine].filter(Boolean) as string[];
-  if (lines.length === 0) return null;
-
-  return {
-    role: 'body',
+  return [{
+    role: 'container',
     identifier: 'credits',
-    text: ['<p><strong>Credits:</strong></p>', ...lines].join(''),
-    format: 'html',
-    layout: 'bodyLayout',
-    style: 'bodyStyle',
-  };
+    layout: 'creditsContainerLayout',
+    components: [
+      {
+        role: 'heading3',
+        text: 'Credits',
+        format: 'html',
+        layout: 'creditsHeadingLayout',
+        style: 'bodyHeadingStyle',
+        textStyle: 'default-heading3',
+      },
+      ...roleSections,
+    ],
+  }];
 }
 
-function peopleLine(
+function peopleComponents(
   label: string,
   people: ResolvedPerson[],
   base: string,
   opts: { includeTitle: boolean },
-): string | null {
-  if (people.length === 0) return null;
-  const rendered = people.map(p => {
+): AnfComponent[] {
+  if (people.length === 0) return [];
+  const items = people.map(p => {
     const nameHtml = p.slug
       ? `<a href="${escapeAttr(`${base}/people/${p.slug}`)}">${escapeHtml(p.name)}</a>`
       : escapeHtml(p.name);
-    return opts.includeTitle && p.title ? `${nameHtml} - ${escapeHtml(p.title)}` : nameHtml;
+    const text = opts.includeTitle && p.title ? `${nameHtml} - ${escapeHtml(p.title)}` : nameHtml;
+    return `<li>${text}</li>`;
   });
-  return `<p>${label}: ${rendered.join('; ')}</p>`;
+  return [
+    {
+      role: 'heading4',
+      text: escapeHtml(label),
+      format: 'html',
+      layout: 'creditsHeadingLayout',
+      style: 'bodyHeadingStyle',
+      textStyle: 'default-heading4',
+    },
+    {
+      role: 'body',
+      text: `<ul>${items.join('')}</ul>`,
+      format: 'html',
+      layout: 'creditsListLayout',
+      style: 'bodyStyle',
+      textStyle: 'default-body',
+    },
+  ];
 }
 
 // ── Thumbnail URL ─────────────────────────────────────────────────────────────
@@ -130,8 +157,7 @@ export const KCRW_OVERRIDES = {
   componentTextStyles: {
     default: {
       fontName: 'Georgia',
-      fontSize: 18,
-      lineHeight: 28,
+      fontSize: 16,
       textColor: PRIMARY_TEXT,
       linkStyle: {
         fontName: 'Georgia-Bold',
@@ -139,35 +165,31 @@ export const KCRW_OVERRIDES = {
       },
       conditional: [
         { textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] },
-        { fontSize: 17, lineHeight: 24, conditions: [{ maxViewportWidth: 414 }] },
+        { fontSize: 15, conditions: [{ maxViewportWidth: 414 }] },
       ],
     },
     'default-show-title': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 16,
-      textTransform: 'uppercase',
       textColor: KCRW_RED,
       conditional: [
-        { textColor: KCRW_RED, conditions: [{ preferredColorScheme: 'dark' }] },
         { fontSize: 14, conditions: [{ maxViewportWidth: 414 }] },
       ],
     },
     'default-title': {
       fontName: 'TrebuchetMS-Bold',
-      fontSize: 42,
-      lineHeight: 42,
+      fontSize: 64,
+      lineHeight: 64,
       textColor: PRIMARY_TEXT,
       textTransform: 'uppercase',
-      conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
-    },
-    'default-intro': {
-      fontName: 'Georgia',
-      fontSize: 16,
-      textColor: PRIMARY_TEXT,
-      conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
+      conditional: [
+        { textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] },
+        { fontSize: 42, lineHeight: 42, conditions: [{ maxViewportWidth: 414 }] },
+      ],
     },
     'default-byline': {
       fontName: 'Georgia',
+      fontSize: 16,
       textColor: PRIMARY_TEXT,
       linkStyle: {
         fontName: 'Georgia-Bold',
@@ -192,7 +214,6 @@ export const KCRW_OVERRIDES = {
     'default-caption': {
       fontName: 'Georgia',
       fontSize: 12,
-      lineHeight: 18,
       textColor: KCRW_GREY,
       textAlignment: 'left',
       conditional: [{ textColor: KCRW_GREY_DARK, conditions: [{ preferredColorScheme: 'dark' }] }],
@@ -200,56 +221,50 @@ export const KCRW_OVERRIDES = {
     'default-heading': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 21,
-      lineHeight: 26,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading1': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 42,
-      lineHeight: 46,
+      lineHeight: 42,
+      textTransform: 'uppercase',
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading2': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 21,
-      lineHeight: 26,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading3': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 21,
-      lineHeight: 26,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading4': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 18,
-      lineHeight: 22,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading5': {
       fontName: 'TrebuchetMS-Bold',
       fontSize: 18,
-      lineHeight: 22,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-heading6': {
       fontName: 'TrebuchetMS',
-      fontSize: 18,
-      lineHeight: 22,
+      fontSize: 16,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
     'default-pullquote': {
       fontName: 'TrebuchetMS-Bold',
-      fontSize: 22,
-      lineHeight: 28,
+      fontSize: 18,
       textColor: PRIMARY_TEXT,
       conditional: [{ textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] }],
     },
@@ -257,33 +272,30 @@ export const KCRW_OVERRIDES = {
       fontName: 'Georgia',
       hyphenation: false,
       fontSize: 16,
-      lineHeight: 23,
       textColor: PRIMARY_TEXT,
       conditional: [
         { textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] },
-        { fontSize: 15, lineHeight: 22, conditions: [{ maxViewportWidth: 414 }] },
+        { fontSize: 15, conditions: [{ maxViewportWidth: 414 }] },
       ],
     },
     'footer-section-first': {
       fontName: 'Georgia',
       hyphenation: false,
       fontSize: 16,
-      lineHeight: 23,
       textColor: PRIMARY_TEXT,
       conditional: [
         { textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] },
-        { fontSize: 15, lineHeight: 22, conditions: [{ maxViewportWidth: 414 }] },
+        { fontSize: 15, conditions: [{ maxViewportWidth: 414 }] },
       ],
     },
     'footer-section-last': {
       fontName: 'Georgia',
       hyphenation: false,
       fontSize: 16,
-      lineHeight: 23,
       textColor: PRIMARY_TEXT,
       conditional: [
         { textColor: DARK_TEXT, conditions: [{ preferredColorScheme: 'dark' }] },
-        { fontSize: 15, lineHeight: 22, conditions: [{ maxViewportWidth: 414 }] },
+        { fontSize: 15, conditions: [{ maxViewportWidth: 414 }] },
       ],
     },
   },
@@ -342,6 +354,18 @@ export const KCRW_OVERRIDES = {
     bodyLayout: {
       padding: { left: 50, right: 50 },
       conditional: [{ padding: { right: 0, left: 0 }, conditions: [{ maxViewportWidth: 414 }] }],
+    },
+    creditsContainerLayout: {
+      margin: { top: 20 },
+      padding: { left: 50, right: 50 },
+      conditional: [{ padding: { left: 0, right: 0 }, conditions: [{ maxViewportWidth: 414 }] }],
+    },
+    creditsHeadingLayout: {
+      margin: { top: 10, bottom: 10 },
+      padding: { top: 10 },
+    },
+    creditsListLayout: {
+      margin: { top: 0, bottom: 10 },
     },
     footerLayout: {
       padding: { top: 20, bottom: 20, left: 38, right: 38 },
