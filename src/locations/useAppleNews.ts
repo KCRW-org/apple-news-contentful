@@ -183,8 +183,9 @@ export function useAppleNews(sdk: EntrySDK) {
     async (action: string, extra?: Record<string, unknown>) => {
       // Encode action + any extra options as a JSON string in the `action` parameter
       // so we don't need additional declared parameters in the App Action schema.
-      const actionValue = extra && Object.keys(extra).length > 0
-        ? JSON.stringify({ name: action, ...extra })
+      const merged = { ...extra, ...(sdk.ids.environmentAlias ? { environmentAlias: sdk.ids.environmentAlias } : {}) };
+      const actionValue = Object.keys(merged).length > 0
+        ? JSON.stringify({ name: action, ...merged })
         : action;
       const result = await cma.appActionCall.createWithResponse(
         {

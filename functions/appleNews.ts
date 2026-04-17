@@ -123,6 +123,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
   // (e.g. '{"name":"publish","isPreview":true}') when extra options are needed, so that we
   // don't require additional declared parameters in the App Action schema.
   let action: string | undefined;
+  let environmentAlias: string | undefined;
   const options: { isPreview?: boolean; isCandidateToBeFeatured?: boolean; isSponsored?: boolean; confirmed?: boolean } = {};
   try {
     const parsed = JSON.parse(body.action ?? '');
@@ -135,6 +136,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       if (parsed.isCandidateToBeFeatured !== undefined) options.isCandidateToBeFeatured = !!parsed.isCandidateToBeFeatured;
       if (parsed.isSponsored !== undefined) options.isSponsored = !!parsed.isSponsored;
       if (parsed.confirmed) options.confirmed = true;
+      if (typeof parsed.environmentAlias === 'string') environmentAlias = parsed.environmentAlias;
     } else {
       action = body.action;
     }
@@ -283,9 +285,20 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
   }
   const credentials: ApiCredentials = { apiKeyId, apiKeySecret, channelId };
   const isPreview = options.isPreview ?? false;
+
+  // The App Actions context always provides the resolved environment ID (e.g.
+  // "goji-testing-2026-01-07"), but CDA API keys are typically granted access to
+  // the alias (e.g. "goji-testing"), not the underlying environment.  Resolve the
+  // alias so the CDA call uses a name the key recognizes.
+  // The App Actions context provides the resolved environment ID (e.g.
+  // "goji-testing-2026-01-07"), but CDA API keys are typically granted access to
+  // the alias (e.g. "goji-testing"), not the underlying environment.  The UI sends
+  // sdk.ids.environmentAlias when available so the CDA call uses the alias name.
+  const cdaEnvironmentId = environmentAlias ?? environmentId;
+
   // CDA-backed source — the Content Delivery API only returns published entries, so
   // draft changes in Contentful can never leak into the article we ship to Apple News.
-  const entrySource = createDeliveryEntrySource({ token: cdaToken, spaceId, environmentId, locale });
+  const entrySource = createDeliveryEntrySource({ token: cdaToken, spaceId, environmentId: cdaEnvironmentId, locale });
 
   try {
     // Validate the entry is published and has no pending draft changes before resolving.
