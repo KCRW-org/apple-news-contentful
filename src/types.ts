@@ -54,6 +54,13 @@ export type AppleNewsData = {
   isPreview?: boolean;
   /** The Contentful entry publishedVersion at the time this article was last sent to Apple News. */
   contentfulVersion?: number;
+  /**
+   * True immediately after the initial create, before Apple News confirms a final state.
+   * Cleared on the first real state write from refreshStatus. When set, failure states
+   * (FAILED_PROCESSING etc.) are written back to reflect that the article never went live.
+   * For updates, failures are not written back — the article presumably remains unchanged.
+   */
+  isProvisional?: boolean;
   /** Article metadata options that were last sent to Apple News. */
   isCandidateToBeFeatured?: boolean;
   isSponsored?: boolean;

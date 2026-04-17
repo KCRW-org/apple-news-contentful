@@ -331,14 +331,14 @@ async function resolveHyperlink(
 }
 
 /** Collects entry IDs of all top-level BLOCKS.EMBEDDED_ENTRY nodes in a rich text document. */
-export function collectEmbeddedEntryIds(doc: Document): string[] {
+function collectEmbeddedEntryIds(doc: Document): string[] {
   return doc.content
     .filter(node => node.nodeType === BLOCKS.EMBEDDED_ENTRY)
     .map(node => (node as any).data.target.sys.id as string);
 }
 
 /** Recursively collects entry IDs of all INLINES.ENTRY_HYPERLINK nodes in a rich text document. */
-export function collectEntryHyperlinkIds(doc: Document): string[] {
+function collectEntryHyperlinkIds(doc: Document): string[] {
   const ids: string[] = [];
   function walk(nodes: unknown[]): void {
     for (const node of nodes) {

@@ -18,7 +18,15 @@ import type { ArticleMetadataOptions } from '../src/lib/api';
 
 type CmaContext = { cma: PlainClientAPI; spaceId: string; environmentId: string };
 
+// States that Apple News returns while an article is still in-flight or has failed.
+// NON_PERSIST_STATES: used in the publish write-back — don't trust these as the stored state;
+//   fall back to existingData?.state (for updates) or 'LIVE' (for initial create).
+// TRANSIENT_STATES: used in refreshStatus — never write back; Apple News is still processing.
+// FAILURE_STATES: used in refreshStatus — only write back when isProvisional (initial create).
+//   For updates, a failure leaves the article unchanged in Apple News, so we keep the stored state.
 const NON_PERSIST_STATES = new Set(['PROCESSING', 'PROCESSING_UPDATE', 'FAILED_PROCESSING', 'FAILED_PROCESSING_UPDATE', 'DUPLICATE']);
+const TRANSIENT_STATES = new Set(['PROCESSING', 'PROCESSING_UPDATE']);
+const FAILURE_STATES = new Set(['FAILED_PROCESSING', 'FAILED_PROCESSING_UPDATE', 'DUPLICATE']);
 
 async function getAppleNewsData(
   entryId: string,
@@ -189,13 +197,16 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
         shareUrl: fresh.shareUrl || stored.shareUrl,
         state,
         contentfulVersion: currentPV ?? stored.contentfulVersion,
+        isProvisional: undefined, // cleared on first real state write
       };
-      // Only persist when the state is a final good state (LIVE, TAKEN_DOWN, etc.).
-      // Transient states (PROCESSING, PROCESSING_UPDATE) and failure/duplicate states
-      // are intentionally not written back — they should not overwrite the last known
-      // good data in the entry, and Apple News may still retry or change them.
+      // Skip transient states (PROCESSING, PROCESSING_UPDATE) — Apple News is still processing.
+      // Skip failure states on updates (isProvisional is false/absent) — the article presumably
+      // remains live; show the error in the UI without overwriting the stored state.
+      // Write failure states only on initial create (isProvisional=true) so the stored state
+      // accurately reflects an article that never went live.
       const stateChanged = stored.state !== state || stored.revision !== fresh.revision;
-      const shouldPersist = stateChanged && (!state || !NON_PERSIST_STATES.has(state));
+      const isFailure = !!(state && FAILURE_STATES.has(state));
+      const shouldPersist = stateChanged && (!state || !TRANSIENT_STATES.has(state)) && (!isFailure || stored.isProvisional === true);
       console.log('[appleNews] refreshStatus entryId=%s %s → %s persist=%s', entryId, stored.state ?? 'none', state ?? 'none', shouldPersist);
       if (shouldPersist) {
         try {
@@ -424,12 +435,20 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       }
     }
 
+    const rawState = articleData.state as AppleNewsState | undefined;
     const data: AppleNewsData = {
       id: articleData.id,
       revision: articleData.revision,
       publishedAt: articleData.publishedAt ?? new Date().toISOString(),
       shareUrl: articleData.shareUrl,
-      state: articleData.state as AppleNewsState | undefined,
+      // If Apple News returns a transient/failure state, assume LIVE so that a successful
+      // poll won't see a state change and trigger a second write-back. Failure states on
+      // initial create are written by refreshStatus (isProvisional=true); on updates they
+      // are not written — the article presumably remains live in Apple News.
+      state: rawState && !NON_PERSIST_STATES.has(rawState) ? rawState : (existingData?.state ?? 'LIVE'),
+      // Mark initial creates as provisional so refreshStatus knows to persist failure states.
+      // Cleared by refreshStatus on the first real state write.
+      isProvisional: existingData?.id ? undefined : true,
       isPreview: isPreview || undefined,
       // Store publishedVersion at click time (v1). Our write + re-publish adds exactly +2,
       // so needsUpdate checks entrySys.publishedVersion > contentfulVersion + 2 to ignore

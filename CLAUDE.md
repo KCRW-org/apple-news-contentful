@@ -46,9 +46,9 @@ This is a **Contentful App** (React SPA + Contentful App Actions) that publishes
 - **`src/lib/conventions.ts`** — **Primary customization point.** Field name constants, shared types, and resolver functions (`formatByline`, `authorNames`, `resolveImage`, `resolveEntryUrl`, `renderAfterBody`, `resolveParentSlug`, `resolveMediaLink`, `resolveArticleMetadata`). Also holds `ARTICLE_BASE_STRUCTURE` and exports `ARTICLE_BASE` (base merged with `KCRW_OVERRIDES`).
 - **`src/lib/kcrw.ts`** — KCRW-specific private helpers (`selectBylinePeople`, `renderCreditsComponent`, `urlWithParent`, `renderThumbnailUrl`) and `KCRW_OVERRIDES` (ANF brand fonts, colors, layouts, dark mode). Replace to adapt to a different brand.
 - **`src/lib/utilities.ts`** — Generic helpers with no site-specific logic: `buildThumbnailUrl` (ANF 1:2–3:1 aspect-ratio clamping), `IMAGE_TARGET_WIDTHS`, `resolveAssetInfo`, `mergeDeep`, `stripMarkdown`, etc.
-- **`src/lib/fetch.ts`** — Resolves a Contentful entry into a flat `ResolvedStory` via `EntrySource`. Single `references` call at depth 3 provides all linked entries and assets; no per-link round-trips. Imports `renderThumbnailUrl` from `kcrw.ts`.
+- **`src/lib/fetch.ts`** — Resolves a Contentful entry into a flat `ResolvedStory` via `EntrySource`. Single `getEntryWithIncludes` call at depth 3 provides all linked entries and assets; no per-link round-trips. Imports `renderThumbnailUrl` from `kcrw.ts`.
 - **`src/lib/article.ts`** — Builds ANF from `ResolvedStory` using `ARTICLE_BASE` from `conventions.ts`. Sets `metadata.thumbnailURL`, `canonicalURL`, `authors`, `excerpt`. Deep-merges `articleCustomizationsJson` from config at the end.
-- **`src/lib/entrySource.ts`** — `EntrySource` interface + CMA implementation. `publishedOnly: true` (default) uses `getPublished`/asset filtering so drafts never reach Apple News; `false` for preview/download flows.
+- **`src/lib/entrySource.ts`** — `EntrySource` interface + CDA/CPA implementation via `createDeliveryEntrySource`. CDA returns published entries only; pass CPA base URL for draft-inclusive preview/download flows.
 - **`src/lib/api.ts`** — HMAC-SHA256-signed multipart HTTP calls to Apple News Publisher API.
 - **`src/locations/downloadPreview.ts`** — Builds `.news.zip` (article.json + bundled images) in-browser via CPA for the Apple News Preview macOS app.
 

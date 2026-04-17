@@ -151,6 +151,7 @@ export function resolveMediaLink(fields: Record<string, unknown>): ResolvedMedia
   const url = fields[MEDIA_LINK_SUBFIELDS.mediaUrl] as string | undefined;
   const hosting = fields[MEDIA_LINK_SUBFIELDS.hosting] as string | undefined;
   if (!url) return null;
+  try { new URL(url); } catch { return null; }
   if (hosting === 'youtube') return { type: 'youtube', url };
   if (hosting === 'iframe' && (url.includes('youtube.com') || url.includes('youtu.be'))) return { type: 'youtube', url };
   if (hosting === 'soundstack') return { type: 'audio', url };

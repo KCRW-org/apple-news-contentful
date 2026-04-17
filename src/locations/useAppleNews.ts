@@ -75,7 +75,7 @@ async function openConflictDialog(sdk: EntrySDK, conflict: ActionConflict): Prom
     details.push(`Status: ${storedLabel} → ${liveLabel}`);
   }
   if (conflict.revisionChanged) {
-    details.push('The article content or settings were modified in Apple News Publisher.');
+    details.push('The article was previously updated in Apple News Publisher.');
   }
   const message = `This article has been changed directly in Apple News Publisher.\n\n${details.join('\n')}\n\nDo you want to continue and overwrite these changes?`;
   return sdk.dialogs.openConfirm({

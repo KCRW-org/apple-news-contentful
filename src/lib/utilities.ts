@@ -80,8 +80,8 @@ export function escapeAttr(s: string): string {
 }
 
 /** ANF thumbnail aspect ratio limits (width ÷ height). */
-export const THUMB_MIN_RATIO = 1 / 2; // 1:2 — tallest allowed
-export const THUMB_MAX_RATIO = 3 / 1; // 3:1 — widest allowed
+const THUMB_MIN_RATIO = 1 / 2; // 1:2 — tallest allowed
+const THUMB_MAX_RATIO = 3 / 1; // 3:1 — widest allowed
 
 /**
  * Builds a Contentful Images API thumbnail URL.
