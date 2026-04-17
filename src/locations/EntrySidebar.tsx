@@ -1,8 +1,8 @@
 import { SidebarAppSDK } from '@contentful/app-sdk';
 import { Button, Flex, Note, Spinner, Text } from '@contentful/f36-components';
 import { useSDK, useAutoResizer } from '@contentful/react-apps-toolkit';
-import { useAppleNews } from './useAppleNews';
 import { APPLE_NEWS_STATE_LABELS } from '../types';
+import { useAppleNews } from './useAppleNews';
 
 const EntrySidebar = () => {
   const sdk = useSDK<SidebarAppSDK>();

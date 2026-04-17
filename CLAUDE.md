@@ -40,7 +40,7 @@ This is a **Contentful App** (React SPA + Contentful App Actions) that publishes
 
 ### Key files
 
-- **`functions/appleNews.ts`** — App Action handler: `publish`, `update`, `delete`, `checkStatus`, `refreshStatus`. Validates entry is published before publishing. Auto-retries on `WRONG_REVISION`.
+- **`functions/appleNews.ts`** — App Action handler: `publish`, `delete`, `checkStatus`, `refreshStatus`. The `publish` action creates or updates (no separate `update` action). Pre-flight conflict check (readArticle before resolveStory): detects state/revision drift and 404 (article deleted). Returns `{ conflict }` for the UI to confirm; re-call with `confirmed: true` (encoded in the JSON action string) to bypass. Auto-retries on `WRONG_REVISION`.
 - **`functions/appEvents.ts`** — Handles `unpublish`/`archive` lifecycle events; deletes Apple News article and clears `appleNewsData`.
 - **`src/locations/useAppleNews.ts`** — Shared hook (sidebar + editor). State machines for publish/delete, exponential-backoff polling (3s→60s, 10min budget), permission checks.
 - **`src/lib/conventions.ts`** — **Primary customization point.** Field name constants, shared types, and resolver functions (`formatByline`, `authorNames`, `resolveImage`, `resolveEntryUrl`, `renderAfterBody`, `resolveParentSlug`, `resolveMediaLink`, `resolveArticleMetadata`). Also holds `ARTICLE_BASE_STRUCTURE` and exports `ARTICLE_BASE` (base merged with `KCRW_OVERRIDES`).

@@ -60,6 +60,24 @@ export type AppleNewsData = {
 };
 
 // App Action result types (returned from functions/appleNews.ts)
+export type ActionConflict =
+  | {
+      /** The live Apple News state detected at action time. */
+      liveState: AppleNewsState;
+      /** The state we had stored in appleNewsData — undefined means we had no record of the state. */
+      storedState?: AppleNewsState;
+      /** True when the Apple News revision differs from what we last stored, indicating an external edit. */
+      revisionChanged?: boolean;
+      articleDeleted?: never;
+    }
+  | {
+      /** The article no longer exists in Apple News (404). Confirming will publish a new article. */
+      articleDeleted: true;
+      liveState?: never;
+      storedState?: never;
+      revisionChanged?: never;
+    };
+
 export type PublishActionResult = {
   success: boolean;
   shareUrl?: string;
@@ -67,6 +85,15 @@ export type PublishActionResult = {
   /** Non-fatal warnings from story resolution and publish (e.g. "Lead image missing", "Revision conflict auto-retried"). */
   warnings?: string[];
   error?: string;
+  /** Set when the live Apple News state differs from our stored state and `confirmed` was not passed. */
+  conflict?: ActionConflict;
+};
+
+export type DeleteActionResult = {
+  success: boolean;
+  error?: string;
+  /** Set when the live Apple News state differs from our stored state and `confirmed` was not passed. */
+  conflict?: ActionConflict;
 };
 
 export type CheckStatusResult = {
@@ -81,10 +108,6 @@ export type CheckStatusResult = {
   error?: string;
 };
 
-export type DeleteActionResult = {
-  success: boolean;
-  error?: string;
-};
 
 // Resolved content shapes — no Contentful SDK types leak past fetch.ts
 export type ResolvedImage = {

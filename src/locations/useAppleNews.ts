@@ -6,9 +6,10 @@ import type {
   DeleteActionResult,
   AppleNewsData,
   AppleNewsState,
+  ActionConflict,
   AppInstallationParameters,
 } from '../types';
-import { PENDING_APPLE_NEWS_STATES } from '../types';
+import { PENDING_APPLE_NEWS_STATES, APPLE_NEWS_STATE_LABELS } from '../types';
 import { FIELD_NAMES } from '../lib/conventions';
 
 export type PublishState =
@@ -53,6 +54,37 @@ function readStoredAppleNewsData(sdk: EntrySDK): AppleNewsData | null {
   } catch {
     return null;
   }
+}
+
+async function openConflictDialog(sdk: EntrySDK, conflict: ActionConflict): Promise<boolean> {
+  if (conflict.articleDeleted) {
+    return sdk.dialogs.openConfirm({
+      title: 'Article deleted in Apple News',
+      message: 'This article no longer exists in Apple News — it may have been deleted directly in Apple News Publisher. Do you want to publish it as a new article?',
+      intent: 'positive',
+      confirmLabel: 'Publish as New Article',
+      cancelLabel: 'Cancel',
+    });
+  }
+  const liveLabel = APPLE_NEWS_STATE_LABELS[conflict.liveState] ?? conflict.liveState;
+  const storedLabel = conflict.storedState
+    ? (APPLE_NEWS_STATE_LABELS[conflict.storedState] ?? conflict.storedState)
+    : 'Unknown';
+  const details: string[] = [];
+  if (conflict.liveState !== conflict.storedState) {
+    details.push(`Status: ${storedLabel} → ${liveLabel}`);
+  }
+  if (conflict.revisionChanged) {
+    details.push('The article content or settings were modified in Apple News Publisher.');
+  }
+  const message = `This article has been changed directly in Apple News Publisher.\n\n${details.join('\n')}\n\nDo you want to continue and overwrite these changes?`;
+  return sdk.dialogs.openConfirm({
+    title: 'Article changed in Apple News',
+    message,
+    intent: 'negative',
+    confirmLabel: 'Continue',
+    cancelLabel: 'Cancel',
+  });
 }
 
 function initialAppleNewsStatus(sdk: EntrySDK): AppleNewsStatus {
@@ -230,10 +262,10 @@ export function useAppleNews(sdk: EntrySDK) {
     pollTimeoutRef.current = setTimeout(tick, POLL_DELAY_INITIAL_MS);
   }, [callAction, stopPolling]);
 
-  // On mount, if the locally-read state is pending, kick off polling immediately.
-  // The local field read already sets the initial status synchronously — no network call needed.
+  // On mount: if the stored state is pending (PROCESSING / PROCESSING_UPDATE), start polling.
   useEffect(() => {
-    if (appleNewsStatus.status === 'published' && appleNewsStatus.polling) {
+    const initial = initialAppleNewsStatus(sdk);
+    if (initial.status === 'published' && initial.polling) {
       startPolling();
     }
     return stopPolling;
@@ -258,7 +290,7 @@ export function useAppleNews(sdk: EntrySDK) {
     entrySys.publishedVersion != null &&
     entrySys.publishedVersion > appleNewsStatus.data.contentfulVersion + 2;
 
-  const doPublish = async (isPreview: boolean, extra?: { isCandidateToBeFeatured?: boolean; isSponsored?: boolean }) => {
+  const doPublish = async (isPreview: boolean, extra?: { isCandidateToBeFeatured?: boolean; isSponsored?: boolean }, confirmed?: boolean) => {
     setDeleteState({ status: 'idle' });
     setPublishState({ status: 'loading', isPreview });
     stopPolling();
@@ -280,8 +312,14 @@ export function useAppleNews(sdk: EntrySDK) {
       mergedExtra.isSponsored = stored.isSponsored;
     }
     try {
-      const raw = await callAction('publish', { ...(isPreview ? { isPreview: true } : undefined), ...mergedExtra });
+      const raw = await callAction('publish', { ...(isPreview ? { isPreview: true } : undefined), ...(confirmed ? { confirmed: true } : undefined), ...mergedExtra });
       const body = JSON.parse(raw) as PublishActionResult;
+      if (body.conflict) {
+        setPublishState({ status: 'idle' });
+        const confirmed = await openConflictDialog(sdk, body.conflict);
+        if (confirmed) await doPublish(isPreview, extra, true);
+        return;
+      }
       if (body.success && body.shareUrl) {
         setPublishState({ status: 'success', shareUrl: body.shareUrl, isPreview, warnings: body.warnings });
         const data = body.data ?? { id: '', revision: '', publishedAt: '', shareUrl: body.shareUrl };
@@ -308,6 +346,22 @@ export function useAppleNews(sdk: EntrySDK) {
     try {
       const raw = await callAction('delete');
       const body = JSON.parse(raw) as DeleteActionResult;
+      if (body.conflict) {
+        setDeleteState({ status: 'idle' });
+        const confirmed = await openConflictDialog(sdk, body.conflict);
+        if (confirmed) {
+          setDeleteState({ status: 'loading' });
+          const raw2 = await callAction('delete', { confirmed: true });
+          const body2 = JSON.parse(raw2) as DeleteActionResult;
+          if (body2.success) {
+            setDeleteState({ status: 'success' });
+            setAppleNewsStatus({ status: 'unpublished' });
+          } else {
+            setDeleteState({ status: 'error', error: body2.error ?? 'Unknown error removing from Apple News' });
+          }
+        }
+        return;
+      }
       if (body.success) {
         setDeleteState({ status: 'success' });
         setAppleNewsStatus({ status: 'unpublished' });

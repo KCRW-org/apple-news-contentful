@@ -14,9 +14,9 @@ import {
   Text,
 } from '@contentful/f36-components';
 import { useSDK } from '@contentful/react-apps-toolkit';
+import { APPLE_NEWS_STATE_LABELS } from '../types';
 import { useAppleNews } from './useAppleNews';
 import { downloadPreview } from './downloadPreview';
-import { APPLE_NEWS_STATE_LABELS } from '../types';
 import type { AppInstallationParameters } from '../types';
 import type { ArticleMetadataExtra } from './AppleNewsControls';
 

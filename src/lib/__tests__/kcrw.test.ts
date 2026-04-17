@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { selectBylinePeople, renderCreditsComponents, urlWithParent } from '../kcrw';
-import type { ResolvedPeople, ResolvedPerson, EntryUrlInput } from '../../types';
+import type { ResolvedPeople, ResolvedPerson, EntryUrlInput, AnfComponent } from '../../types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

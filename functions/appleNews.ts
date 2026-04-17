@@ -113,7 +113,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
   // (e.g. '{"name":"publish","isPreview":true}') when extra options are needed, so that we
   // don't require additional declared parameters in the App Action schema.
   let action: string | undefined;
-  const options: { isPreview?: boolean; isCandidateToBeFeatured?: boolean; isSponsored?: boolean } = {};
+  const options: { isPreview?: boolean; isCandidateToBeFeatured?: boolean; isSponsored?: boolean; confirmed?: boolean } = {};
   try {
     const parsed = JSON.parse(body.action ?? '');
     if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
@@ -124,6 +124,7 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       // leaves them at their current stored value.
       if (parsed.isCandidateToBeFeatured !== undefined) options.isCandidateToBeFeatured = !!parsed.isCandidateToBeFeatured;
       if (parsed.isSponsored !== undefined) options.isSponsored = !!parsed.isSponsored;
+      if (parsed.confirmed) options.confirmed = true;
     } else {
       action = body.action;
     }
@@ -217,6 +218,23 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
     try {
       const { data } = await getAppleNewsData(entryId, locale, ctx, fieldName);
       if (data?.id) {
+        // Check live state before deleting — surface conflicts and handle already-deleted articles.
+        try {
+          const fresh = await readArticle(data.id, credentials);
+          const liveState = fresh.state as AppleNewsState | undefined;
+          const stateChanged = liveState !== data.state;
+          const revisionChanged = fresh.revision !== data.revision;
+          if (!options.confirmed && (stateChanged || revisionChanged)) {
+            return { success: false, conflict: { liveState: liveState!, storedState: data.state, revisionChanged } } as DeleteActionResult;
+          }
+        } catch (readErr) {
+          // 404 means the article was already deleted from Apple News — skip the API delete.
+          if (readErr instanceof AppleNewsApiError && readErr.status === 404) {
+            await clearAppleNewsData(entryId, locale, ctx, fieldName);
+            return { success: true } as DeleteActionResult;
+          }
+          throw readErr;
+        }
         await deleteArticle(data.id, credentials);
       }
       await clearAppleNewsData(entryId, locale, ctx, fieldName);
@@ -228,6 +246,11 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
   }
 
   // ── publish / update ───────────────────────────────────────────────────────
+  // Guard: reject unrecognized actions so they never fall through to the publish flow.
+  if (action !== 'publish' && action != null) {
+    return { success: false, error: `Unknown action: ${String(action)}` } as PublishActionResult;
+  }
+
   if (!apiKeyId || !apiKeySecret || !channelId) {
     return { success: false, error: 'Missing Apple News credentials. Check the app configuration.' } as PublishActionResult;
   }
@@ -264,6 +287,51 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       return { success: false, error: 'Entry title is empty. Set a title in Contentful before sending to Apple News.' } as PublishActionResult;
     }
 
+    // ── Pre-flight conflict check ─────────────────────────────────────────────
+    // Done before the expensive resolveStory/buildArticle work so we can return
+    // early when the user needs to confirm an external change first.
+    // We also fetch the fresh revision here (needed to avoid 409 on update) and
+    // carry it forward so we don't need a second readArticle call later.
+    const { data: existingData } = await getAppleNewsData(entryId, locale, ctx, fieldName);
+
+    // Track whether the stored article ID was found to be deleted in Apple News — in that
+    // case we create a new article (after the user confirms) rather than trying to update.
+    let storedArticleDeleted = false;
+    // Fresh Apple News article data fetched before the update — carries current revision.
+    let freshArticle: AppleNewsArticleData | null = null;
+
+    if (existingData?.id) {
+      try {
+        freshArticle = await readArticle(existingData.id, credentials);
+      } catch (readErr) {
+        if (readErr instanceof AppleNewsApiError && readErr.status === 404) {
+          // Article was deleted from Apple News directly. Ask the user to confirm a re-publish.
+          if (!options.confirmed) {
+            return { success: false, conflict: { articleDeleted: true } } as PublishActionResult;
+          }
+          storedArticleDeleted = true;
+        } else {
+          const detail = readErr instanceof Error ? readErr.message : String(readErr);
+          throw new Error(
+            `Could not fetch the current article revision from Apple News (article ${existingData.id}). Details: ${detail}`,
+          );
+        }
+      }
+      if (freshArticle !== null) {
+        // Conflict check: surface external changes before overwriting with our content.
+        // Trigger when the live state differs from stored (always checked — storedState may
+        // be undefined for old records) OR when the revision changed (meaning someone edited
+        // or published the article outside Contentful, e.g. promoting a preview to live).
+        const liveState = freshArticle.state as AppleNewsState | undefined;
+        const stateChanged = liveState !== existingData.state;
+        const revisionChanged = freshArticle.revision !== existingData.revision;
+        if (!options.confirmed && (stateChanged || revisionChanged)) {
+          return { success: false, conflict: { liveState: liveState!, storedState: existingData.state, revisionChanged } } as PublishActionResult;
+        }
+      }
+    }
+
+    // ── Resolve content and build ANF ─────────────────────────────────────────
     const story = await resolveStory(entryId, params, entrySource);
     const warnings: string[] = [...story.warnings];
 
@@ -298,32 +366,18 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
       ...(options.isSponsored !== undefined ? { isSponsored: options.isSponsored } : undefined),
     };
 
-    // Check if already published (update vs create)
-    const { data: existingData } = await getAppleNewsData(entryId, locale, ctx, fieldName);
-
+    // ── Create or update ──────────────────────────────────────────────────────
     let articleData: AppleNewsArticleData;
-    if (existingData?.id) {
-      // Always refresh revision before update to avoid 409 conflicts.
-      let fresh: AppleNewsArticleData;
+    if (existingData?.id && freshArticle !== null) {
       try {
-        fresh = await readArticle(existingData.id, credentials);
-      } catch (readErr) {
-        const detail = readErr instanceof Error ? readErr.message : String(readErr);
-        throw new Error(
-          `Could not fetch the current article revision from Apple News (article ${existingData.id}). ` +
-            `The article may have been deleted from Apple News directly. ` +
-            `Try deleting from the sidebar and re-publishing. Details: ${detail}`,
-        );
-      }
-      try {
-        articleData = await updateArticle(existingData.id, fresh.revision, articleJson, credentials, metadataOptions);
+        articleData = await updateArticle(existingData.id, freshArticle.revision, articleJson, credentials, metadataOptions);
       } catch (err) {
         // Version-conflict auto-retry: fetch the latest revision once more and try again.
         // Any second failure (including a second WRONG_REVISION) surfaces to the user.
         if (err instanceof AppleNewsApiError && err.code === 'WRONG_REVISION') {
           const retryRead = await readArticle(existingData.id, credentials);
           warnings.push(
-            `Apple News reported a revision conflict (expected ${fresh.revision}, current ${retryRead.revision}). ` +
+            `Apple News reported a revision conflict (expected ${freshArticle.revision}, current ${retryRead.revision}). ` +
               `The article was updated concurrently; retrying once with the current revision.`,
           );
           articleData = await updateArticle(existingData.id, retryRead.revision, articleJson, credentials, metadataOptions);
@@ -331,6 +385,10 @@ export const appleNewsHandler: AppActionHandler = async (event, context) => {
           throw err;
         }
       }
+    } else if (existingData?.id && storedArticleDeleted) {
+      // confirmed after articleDeleted conflict: create a brand-new article
+      articleData = await createArticle(articleJson, credentials, metadataOptions);
+      warnings.push('The previous Apple News article was no longer found — published as a new article.');
     } else {
       try {
         articleData = await createArticle(articleJson, credentials, metadataOptions);
