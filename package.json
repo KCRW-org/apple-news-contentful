@@ -30,6 +30,8 @@
     "upload-ci": "contentful-app-scripts upload --ci --host api.contentful.com --bundle-dir ./build --organization-id $CONTENTFUL_ORG_ID --definition-id $CONTENTFUL_APP_DEF_ID --token $CONTENTFUL_ACCESS_TOKEN",
     "install-app": "contentful-app-scripts install",
     "install-app:dev": "dotenv -e .env.development -- contentful-app-scripts install",
+    "add-locations": "contentful-app-scripts add-locations",
+    "add-locations:dev": "dotenv -e .env.development -- contentful-app-scripts add-locations",
     "create-app-action": "CONTENTFUL_HOST=api.contentful.com tsx -r dotenv/config ./src/tools/create-app-action.ts",
     "create-app-action:dev": "dotenv -e .env.development -- cross-env CONTENTFUL_HOST=api.contentful.com tsx ./src/tools/create-app-action.ts",
     "preview-article": "tsx -r dotenv/config ./src/tools/preview-article.ts",

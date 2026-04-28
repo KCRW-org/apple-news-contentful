@@ -517,6 +517,7 @@ export const siteConfig: SiteConfig = {
   },
 
   contentTypeIds: {
+    story: 'story',
     photo: 'photo',
     mediaLink: 'mediaLink',
   },

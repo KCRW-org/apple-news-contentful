@@ -30,6 +30,7 @@ export interface FieldNameConfig {
 }
 
 export interface ContentTypeIdConfig {
+  story: string;
   photo: string;
   mediaLink: string;
 }

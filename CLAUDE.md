@@ -69,3 +69,65 @@ Publish state (article ID, revision, share URL, processing state, `isPreview` fl
 ### Dev environment
 
 Credentials go in `.env.development` (copy from `.env.example`). The `CONTENTFUL_APP_DEF_ID` quirk: `create-app-definition` writes the new ID to `.env`, not `.env.development` — copy it over manually.
+
+## MCP Tools
+
+**Scope: this entire section applies to the main agent only. Sub-agents (spawned via the Agent / Task tool) should skip the MCP startup ritual and use Bash/Read/Grep/Edit directly. Sub-agents inherit a small context budget; reflexive MCP calls blow it on JSON output before the actual task.**
+
+**IMPORTANT (main agent): ALWAYS use MCP tools BEFORE Grep/Glob/Read/Bash to explore the codebase.**
+
+### Session start
+
+At the start of every session, call these two tools in sequence before any code exploration:
+
+1. `mcp__token-savior__set_project_root({ path: "/Users/alecmitchell/Development/bundles/kcrw/apple-news-contentful" })`
+2. `mcp__token-savior__reindex({})`
+
+No-op if nothing changed — cheap to run unconditionally.
+
+### Session handoff
+
+When running `/session-handoff`, call `mcp__token-savior__reindex` first so the index is current before the handoff summary is generated.
+
+### Decision guide
+
+| Task | Tool |
+|------|------|
+| **About to edit a symbol** | `get_edit_context` — source + deps + callers + tests in one call |
+| Just need a function's source | `get_function_source` or `get_full_context` |
+| Find a function/class by name or concept | `find_symbol` or `search_codebase` |
+| Blast radius of a symbol-level change | `get_change_impact` |
+| Tracing callers / callees | `get_dependents` / `get_dependencies` |
+| End-to-end call chain | `get_call_chain` |
+| Finding dead / unused code | `find_dead_code` |
+| Architecture / high-level structure | `get_project_summary` |
+| Remembering context across sessions | `memory_save` / `memory_search` |
+| Checking token budget this session | `get_session_budget` |
+
+### Key tools
+
+| Tool | Use when |
+|------|----------|
+| `get_edit_context` | **Before editing** — source + deps + callers + siblings + tests |
+| `get_full_context` | Symbol source + depth-1 deps/dependents (batch up to 10) |
+| `get_function_source` | Just one function's source |
+| `get_change_impact` | Symbol-level transitive dependents |
+| `get_call_chain` | End-to-end call path tracing |
+| `search_codebase` | Regex search across all indexed files |
+| `find_dead_code` | Unused exports |
+| `memory_save` / `memory_search` | Persist notes across sessions |
+| `get_session_budget` | Check token usage this session |
+
+### Typical workflows
+
+**Editing a symbol**
+1. `get_edit_context <symbol>` — everything needed in one call
+2. Edit the file
+3. `get_change_impact <symbol>` — verify no unexpected breakage
+
+**Exploring unfamiliar code**
+1. `find_symbol` or `search_codebase` — locate the symbol
+2. `get_full_context` — source + immediate deps
+3. `get_dependents` — who calls it
+
+> Fetch tool schemas via `ToolSearch` before the first call in a session (e.g. `"select:mcp__token-savior__get_edit_context"`).

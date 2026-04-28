@@ -260,3 +260,20 @@ export type AnfDocument = {
   componentLayouts: Record<string, unknown>;
   metadata: Record<string, unknown>;
 };
+
+export interface PublishedStorySummary {
+  entryId: string;
+  appleNewsId: string;
+  title: string;
+  bylineDate?: string;
+  updatedAt: string;
+  shareUrl?: string;
+  state?: AppleNewsState;
+  isPreview: boolean;
+  needsUpdate: boolean;
+  hasDraft: boolean;
+}
+
+export type SortOption = 'publishDate' | 'updatedAt';
+
+export type PublishStatusFilter = 'all' | 'published' | 'preview';

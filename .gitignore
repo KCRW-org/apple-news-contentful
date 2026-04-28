@@ -7,3 +7,7 @@ dist/
 *.local
 *.local.json
 .playwright-mcp
+.python-version
+.token-savior-cache.json
+
+.mcp.json
