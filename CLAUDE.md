@@ -80,7 +80,7 @@ Credentials go in `.env.development` (copy from `.env.example`). The `CONTENTFUL
 
 At the start of every session, call these two tools in sequence before any code exploration:
 
-1. `mcp__token-savior__set_project_root({ path: "/Users/alecmitchell/Development/bundles/kcrw/apple-news-contentful" })`
+1. `mcp__token-savior__set_project_root({ path: "~/path/to/apple-news-contentful" })`
 2. `mcp__token-savior__reindex({})`
 
 No-op if nothing changed — cheap to run unconditionally.
