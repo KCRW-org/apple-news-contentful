@@ -30,9 +30,35 @@ npm run build && npm run upload:dev
 # 4. Register the App Action
 npm run create-app-action:dev
 
-# 5. Install the app in your space
+# 5. Declare the installation parameter schema (tokens as Secret) on the app definition
+npm run update-app-definition:dev
+
+# 6. Install the app in your space
 npm run install-app:dev
 ```
+
+### Credential security
+
+`apiKeySecret` and `cdaToken` are declared as **Secret** installation parameters
+(step 5): Contentful redacts them in the browser and in CMA reads, and only the App
+Function receives the raw values. Without this declaration, installation parameters
+are readable by anybody who belongs to the space.
+
+`cpaToken` cannot be a Secret — the in-browser Download Preview feature reads it via
+the App SDK — so it remains visible to space users. That grants editors nothing they
+don't already have (draft read access), but use a token scoped to this space and
+rotate it when staff change.
+
+The Config screen treats the two secret fields as write-only: it shows a
+"(configured)" placeholder when a value is stored, and leaving the field blank on
+save keeps the stored value.
+
+Declaring installation parameters closes the schema: Contentful rejects any
+installation save containing an undeclared key with a 422 ("The property X is not
+expected"), so `update-app-definition` declares **every** parameter, not just the
+secrets. When adding a parameter to `AppInstallationParameters`, add it to
+`src/tools/update-app-definition.ts` and re-run the script before shipping, or
+config-screen saves will start failing.
 
 ### Content type requirements
 

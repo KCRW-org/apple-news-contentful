@@ -440,8 +440,8 @@ describe('resolveMediaLink', () => {
 describe('resolveParentSlug', () => {
   it('resolves the first show via entriesById for a Story', () => {
     const entriesById = new Map([
-      ['show-1', { contentType: 'Show', fields: { [fieldNames.slug]: 'morning-edition' } }],
-      ['show-2', { contentType: 'Show', fields: { [fieldNames.slug]: 'other-show' } }],
+      ['show-1', { contentType: 'show', fields: { [fieldNames.slug]: 'morning-edition' } }],
+      ['show-2', { contentType: 'show', fields: { [fieldNames.slug]: 'other-show' } }],
     ]);
     const fields = {
       [fieldNames.showsCollection]: [
@@ -449,39 +449,39 @@ describe('resolveParentSlug', () => {
         { sys: { id: 'show-2' } },
       ],
     };
-    expect(siteConfig.resolveParentSlug(fields, 'Story', entriesById)).toEqual({ slug: 'morning-edition', contentType: 'Show' });
+    expect(siteConfig.resolveParentSlug(fields, 'story', entriesById)).toEqual({ slug: 'morning-edition', contentType: 'show' });
   });
 
   it('returns undefined when showsCollection is empty', () => {
-    expect(siteConfig.resolveParentSlug({ [fieldNames.showsCollection]: [] }, 'Story')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({ [fieldNames.showsCollection]: [] }, 'story')).toBeUndefined();
   });
 
   it('returns undefined when showsCollection field is absent', () => {
-    expect(siteConfig.resolveParentSlug({}, 'Story')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({}, 'story')).toBeUndefined();
   });
 
   it('returns undefined when the show is not in entriesById', () => {
     const fields = { [fieldNames.showsCollection]: [{ sys: { id: 'show-1' } }] };
-    expect(siteConfig.resolveParentSlug(fields, 'Story', new Map())).toBeUndefined();
+    expect(siteConfig.resolveParentSlug(fields, 'story', new Map())).toBeUndefined();
   });
 
   it('returns undefined when the linked show has no slug', () => {
-    const entriesById = new Map([['show-1', { contentType: 'Show', fields: {} }]]);
+    const entriesById = new Map([['show-1', { contentType: 'show', fields: {} }]]);
     const fields = { [fieldNames.showsCollection]: [{ sys: { id: 'show-1' } }] };
-    expect(siteConfig.resolveParentSlug(fields, 'Story', entriesById)).toBeUndefined();
+    expect(siteConfig.resolveParentSlug(fields, 'story', entriesById)).toBeUndefined();
   });
 
   it('resolves parent for a LandingPage via seoMetadata → canonicalUrlParent', () => {
     const entriesById = new Map([
       ['seo-1', { contentType: 'seoMetadata', fields: { canonicalUrlParent: { sys: { id: 'parent-1' } } } }],
-      ['parent-1', { contentType: 'LandingPage', fields: { [fieldNames.slug]: 'music' } }],
+      ['parent-1', { contentType: 'landingPage', fields: { [fieldNames.slug]: 'music' } }],
     ]);
     const fields = { seoMetadata: { sys: { id: 'seo-1' } } };
-    expect(siteConfig.resolveParentSlug(fields, 'LandingPage', entriesById)).toEqual({ slug: 'music', contentType: 'LandingPage' });
+    expect(siteConfig.resolveParentSlug(fields, 'landingPage', entriesById)).toEqual({ slug: 'music', contentType: 'landingPage' });
   });
 
   it('returns undefined for LandingPage when entriesById is absent', () => {
-    expect(siteConfig.resolveParentSlug({ seoMetadata: { sys: { id: 'seo-1' } } }, 'LandingPage')).toBeUndefined();
+    expect(siteConfig.resolveParentSlug({ seoMetadata: { sys: { id: 'seo-1' } } }, 'landingPage')).toBeUndefined();
   });
 
   it('returns undefined for unknown content types', () => {
@@ -496,62 +496,62 @@ describe('resolveEntryUrl', () => {
   const template = `${base}/some/path`;
 
   it('resolves a Story with a parent show', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'story', slug: 'my-story', parentSlug: 'morning-edition', parentContentType: 'show' }, template))
       .toBe(`${base}/shows/morning-edition/stories/my-story`);
   });
 
   it('resolves a Story without a parent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'story', slug: 'my-story' }, template))
       .toBe(`${base}/stories/my-story`);
   });
 
   it('resolves a Show', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Show', slug: 'morning-edition' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'show', slug: 'morning-edition' }, template))
       .toBe(`${base}/shows/morning-edition`);
   });
 
   it('resolves an Event without a parent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Event', slug: 'big-concert' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'event', slug: 'big-concert' }, template))
       .toBe(`${base}/events/big-concert`);
   });
 
   it('resolves an Event nested under a Show', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Event', slug: 'big-concert', parentSlug: 'morning-edition', parentContentType: 'Show' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'event', slug: 'big-concert', parentSlug: 'morning-edition', parentContentType: 'show' }, template))
       .toBe(`${base}/shows/morning-edition/big-concert`);
   });
 
   it('resolves a Page without a parent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Page', slug: 'about' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'page', slug: 'about' }, template))
       .toBe(`${base}/pages/about`);
   });
 
   it('resolves a Page nested under a LandingPage', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Page', slug: 'about', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'page', slug: 'about', parentSlug: 'music', parentContentType: 'landingPage' }, template))
       .toBe(`${base}/music/about`);
   });
 
   it('resolves a LandingPage without a parent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'LandingPage', slug: 'music' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'landingPage', slug: 'music' }, template))
       .toBe(`${base}/music`);
   });
 
   it('resolves a LandingPage nested under another LandingPage', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'LandingPage', slug: 'jazz', parentSlug: 'music', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'landingPage', slug: 'jazz', parentSlug: 'music', parentContentType: 'landingPage' }, template))
       .toBe(`${base}/music/jazz`);
   });
 
   it('resolves a Category without a parent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Category', slug: 'news' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'category', slug: 'news' }, template))
       .toBe(`${base}/categories/news`);
   });
 
   it('resolves a Category nested under a LandingPage', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Category', slug: 'news', parentSlug: 'topics', parentContentType: 'LandingPage' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'category', slug: 'news', parentSlug: 'topics', parentContentType: 'landingPage' }, template))
       .toBe(`${base}/topics/news`);
   });
 
   it('resolves a Person', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Person', slug: 'jane-doe' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'person', slug: 'jane-doe' }, template))
       .toBe(`${base}/people/jane-doe`);
   });
 
@@ -560,16 +560,16 @@ describe('resolveEntryUrl', () => {
   });
 
   it('returns null when slug is absent', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Story' }, template)).toBeNull();
+    expect(siteConfig.resolveEntryUrl({ contentType: 'story' }, template)).toBeNull();
   });
 
   it('uses empty base when canonicalUrlTemplate is empty', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Show', slug: 'kcrw-music' }, ''))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'show', slug: 'kcrw-music' }, ''))
       .toBe('/shows/kcrw-music');
   });
 
   it('falls back to default path when parent content type is unknown', () => {
-    expect(siteConfig.resolveEntryUrl({ contentType: 'Story', slug: 'my-story', parentSlug: 'foo', parentContentType: 'Unknown' }, template))
+    expect(siteConfig.resolveEntryUrl({ contentType: 'story', slug: 'my-story', parentSlug: 'foo', parentContentType: 'Unknown' }, template))
       .toBe(`${base}/stories/my-story`);
   });
 });
@@ -579,7 +579,7 @@ describe('resolveEntryUrl', () => {
 describe('resolvePeople', () => {
   const makeEntry = (name: string, title?: string, slug?: string) => ({
     id: `id-${name}`,
-    contentType: 'Person',
+    contentType: 'person',
     fields: { name, title: title ?? null, slug: slug ?? null },
   });
 
@@ -618,7 +618,7 @@ describe('resolvePeople', () => {
 
   it('warns and skips when entry has no name', () => {
     const entriesById = new Map([
-      ['h1', { id: 'h1', contentType: 'Person', fields: {} }],
+      ['h1', { id: 'h1', contentType: 'person', fields: {} }],
     ]);
     const fields = { hosts: [{ sys: { id: 'h1' } }] };
     const warnings: string[] = [];

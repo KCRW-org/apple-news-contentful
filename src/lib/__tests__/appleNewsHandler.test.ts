@@ -108,7 +108,7 @@ function mock404() {
 function cdaEntryResponse(entryId: string) {
   return {
     items: [{
-      sys: { id: entryId, contentType: { sys: { id: 'Story' } } },
+      sys: { id: entryId, contentType: { sys: { id: 'story' } } },
       fields: { title: 'Test Story' },
     }],
   };
@@ -226,6 +226,63 @@ describe('delete action — conflict detection', () => {
 
     expect(result.success).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled(); // no Apple News call needed
+  });
+});
+
+// ── auto-publish guard after appleNewsData writes ─────────────────────────────
+
+describe('auto-publish guard', () => {
+  /** readArticle matching stored state/revision (no conflict), then DELETE 204. */
+  function mockDeleteFlow() {
+    return vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        text: async () => JSON.stringify({ data: { id: STORED_DATA.id, revision: STORED_DATA.revision, state: STORED_DATA.state, shareUrl: STORED_DATA.shareUrl } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+        text: async () => '',
+      }) as typeof fetch;
+  }
+
+  it('delete does NOT auto-publish when the entry has pending draft changes', async () => {
+    global.fetch = mockDeleteFlow();
+
+    const event = makeEvent('delete');
+    // version = publishedVersion + 3 → entry has draft changes beyond the published version
+    const ctx = makeContext({ storedData: STORED_DATA, publishedVersion: 5, entryVersion: 8 });
+    const result = await appleNewsHandler(event as never, ctx as never) as DeleteActionResult;
+
+    expect(result.success).toBe(true);
+    expect(ctx.cma.entry.update).toHaveBeenCalled();   // field clear still written
+    expect(ctx.cma.entry.publish).not.toHaveBeenCalled(); // drafts must not go live
+  });
+
+  it('delete does NOT auto-publish when the entry was never published', async () => {
+    global.fetch = mockDeleteFlow();
+
+    const event = makeEvent('delete');
+    const ctx = makeContext({ storedData: STORED_DATA, publishedVersion: undefined as never, entryVersion: 4 });
+    const result = await appleNewsHandler(event as never, ctx as never) as DeleteActionResult;
+
+    expect(result.success).toBe(true);
+    expect(ctx.cma.entry.update).toHaveBeenCalled();
+    expect(ctx.cma.entry.publish).not.toHaveBeenCalled();
+  });
+
+  it('delete auto-publishes when the entry is clean (no pending drafts)', async () => {
+    global.fetch = mockDeleteFlow();
+
+    const event = makeEvent('delete');
+    const ctx = makeContext({ storedData: STORED_DATA, publishedVersion: 5, entryVersion: 6 });
+    const result = await appleNewsHandler(event as never, ctx as never) as DeleteActionResult;
+
+    expect(result.success).toBe(true);
+    expect(ctx.cma.entry.publish).toHaveBeenCalled();
   });
 });
 

@@ -55,9 +55,9 @@ export async function resolveStory(
   const parentLookup = new Map(
     [...entriesById.entries()].map(([id, e]) => [id, { contentType: e.contentType, fields: e.fields }]),
   );
-  const parent = siteConfig.resolveParentSlug(fields, 'Story', parentLookup);
+  const parent = siteConfig.resolveParentSlug(fields, entry.contentType, parentLookup);
   const canonicalUrl = siteConfig.resolveEntryUrl(
-    { contentType: 'Story', slug, parentSlug: parent?.slug, parentContentType: parent?.contentType },
+    { contentType: entry.contentType, slug, parentSlug: parent?.slug, parentContentType: parent?.contentType },
     params.canonicalUrlTemplate ?? '',
   );
 

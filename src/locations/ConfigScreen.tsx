@@ -29,8 +29,23 @@ function parseJsonError(value: string, e: SyntaxError): string {
   return `Invalid JSON: ${e.message}`;
 }
 
+/**
+ * Installation parameters declared with type "Secret" on the AppDefinition
+ * (see src/tools/update-app-definition.ts). The App SDK only ever sees a
+ * redacted placeholder for these, so the inputs below are write-only: the
+ * admin types a value to set/replace it, or leaves the field blank to keep
+ * the stored one (we pass the loaded redacted value back through unchanged).
+ */
+const SECRET_PARAM_KEYS = ['apiKeySecret', 'cdaToken'] as const;
+type SecretParamKey = (typeof SECRET_PARAM_KEYS)[number];
+
 const ConfigScreen = () => {
   const [parameters, setParameters] = useState<AppInstallationParameters>({});
+  // Values typed this session for Secret params; '' means "keep the stored value".
+  const [secretEdits, setSecretEdits] = useState<Record<SecretParamKey, string>>({
+    apiKeySecret: '',
+    cdaToken: '',
+  });
   const [customizationsError, setCustomizationsError] = useState<string | null>(null);
   const [sectionMappingError, setSectionMappingError] = useState<string | null>(null);
   const sdk = useSDK<ConfigAppSDK>();
@@ -52,9 +67,16 @@ const ConfigScreen = () => {
       }
     }
     if (blocked) return false;
+    // New typed secret values replace stored ones; blank inputs pass the loaded
+    // (redacted) value back through so the stored secret is preserved.
+    const merged = { ...parameters };
+    for (const key of SECRET_PARAM_KEYS) {
+      const typed = secretEdits[key].trim();
+      if (typed) merged[key] = typed;
+    }
     const currentState = await sdk.app.getCurrentState();
-    return { parameters, targetState: currentState };
-  }, [parameters, sdk]);
+    return { parameters: merged, targetState: currentState };
+  }, [parameters, secretEdits, sdk]);
 
   useEffect(() => {
     sdk.app.onConfigure(onConfigure);
@@ -74,6 +96,17 @@ const ConfigScreen = () => {
     };
   }
 
+  function updateSecret(key: SecretParamKey) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSecretEdits(prev => ({ ...prev, [key]: e.target.value }));
+    };
+  }
+
+  // A secret is "set" when a stored (redacted) value was loaded or a new one was typed.
+  function secretIsSet(key: SecretParamKey): boolean {
+    return !!parameters[key] || !!secretEdits[key].trim();
+  }
+
   return (
     <Flex flexDirection="column" margin="spacingL">
       <Heading>Apple News Publisher — App Config</Heading>
@@ -90,18 +123,20 @@ const ConfigScreen = () => {
           )}
         </FormControl>
 
-        <FormControl isRequired isInvalid={!parameters.apiKeySecret}>
+        <FormControl isRequired isInvalid={!secretIsSet('apiKeySecret')}>
           <FormControl.Label>API Key Secret</FormControl.Label>
           <TextInput
-            value={parameters.apiKeySecret ?? ''}
+            value={secretEdits.apiKeySecret}
             name="apiKeySecret"
             type="password"
-            onChange={updateParam('apiKeySecret')}
+            onChange={updateSecret('apiKeySecret')}
+            placeholder={parameters.apiKeySecret ? '••••••••  (configured)' : ''}
           />
           <FormControl.HelpText>
-            Base64-encoded Apple News API key secret.
+            Base64-encoded Apple News API key secret. Stored as a secret — only readable
+            by the App Function.{parameters.apiKeySecret ? ' Leave blank to keep the current value.' : ''}
           </FormControl.HelpText>
-          {!parameters.apiKeySecret && (
+          {!secretIsSet('apiKeySecret') && (
             <FormControl.ValidationMessage>Required.</FormControl.ValidationMessage>
           )}
         </FormControl>
@@ -118,20 +153,22 @@ const ConfigScreen = () => {
           )}
         </FormControl>
 
-        <FormControl isRequired isInvalid={!parameters.cdaToken}>
+        <FormControl isRequired isInvalid={!secretIsSet('cdaToken')}>
           <FormControl.Label>Content Delivery API Token</FormControl.Label>
           <TextInput
-            value={parameters.cdaToken ?? ''}
+            value={secretEdits.cdaToken}
             name="cdaToken"
             type="password"
-            onChange={updateParam('cdaToken')}
+            onChange={updateSecret('cdaToken')}
+            placeholder={parameters.cdaToken ? '••••••••  (configured)' : ''}
           />
           <FormControl.HelpText>
             Contentful Content Delivery API access token. Used by the App Action to read
             published entries when sending to Apple News — the CDA guarantees only published
-            content is returned, so draft changes never leak into articles.
+            content is returned, so draft changes never leak into articles. Stored as a
+            secret — only readable by the App Function.{parameters.cdaToken ? ' Leave blank to keep the current value.' : ''}
           </FormControl.HelpText>
-          {!parameters.cdaToken && (
+          {!secretIsSet('cdaToken') && (
             <FormControl.ValidationMessage>Required.</FormControl.ValidationMessage>
           )}
         </FormControl>
@@ -147,6 +184,8 @@ const ConfigScreen = () => {
           <FormControl.HelpText>
             Contentful Content Preview API token. Used by the browser download-preview
             to read draft content so editors can inspect unpublished changes before publishing.
+            Because it runs in the browser, this token is readable by all space users —
+            use a token scoped to this space only.
           </FormControl.HelpText>
           {!parameters.cpaToken && (
             <FormControl.ValidationMessage>Required.</FormControl.ValidationMessage>

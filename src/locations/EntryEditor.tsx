@@ -110,7 +110,10 @@ const EntryEditor = () => {
         entryId: sdk.ids.entry,
         params,
         spaceId: sdk.ids.space,
-        environmentId: sdk.ids.environment,
+        // CPA tokens are granted access to the alias (e.g. "staging"), not the
+        // resolved environment ID (e.g. "staging-2026-01-07") — same workaround
+        // as the publish path, which sends environmentAlias to the App Action.
+        environmentId: sdk.ids.environmentAlias ?? sdk.ids.environment,
       });
       setDownloadState({ status: 'success', warnings, bundledCount });
     } catch (err) {

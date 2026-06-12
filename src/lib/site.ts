@@ -78,8 +78,8 @@ function selectBylinePeople(people: ResolvedPeople): { prefix: string; names: Re
 function urlWithParent(entry: EntryUrlInput): string | null {
   if (!entry.parentSlug) return null;
   switch (entry.parentContentType) {
-    case 'Show': return `shows/${entry.parentSlug}/${entry.slug}`;
-    case 'LandingPage': return `${entry.parentSlug}/${entry.slug}`;
+    case 'show': return `shows/${entry.parentSlug}/${entry.slug}`;
+    case 'landingPage': return `${entry.parentSlug}/${entry.slug}`;
     default: return null;
   }
 }
@@ -630,7 +630,7 @@ export const siteConfig: SiteConfig = {
     entriesById?: Map<string, ParentLookupEntry>,
   ): ResolvedParent | undefined {
     switch (entryContentType) {
-      case 'Story': {
+      case 'story': {
         const items = fields[siteConfig.fieldNames.showsCollection] as { sys?: { id?: string } }[] | undefined;
         const showId = items?.[0]?.sys?.id;
         const show = showId ? entriesById?.get(showId) : undefined;
@@ -639,9 +639,9 @@ export const siteConfig: SiteConfig = {
         if (!slug) return undefined;
         return { slug, contentType: show.contentType };
       }
-      case 'Page':
-      case 'LandingPage':
-      case 'Category': {
+      case 'page':
+      case 'landingPage':
+      case 'category': {
         if (!entriesById) return undefined;
         const seoLink = fields[SEO_SUBFIELDS.seoMetadata] as { sys?: { id?: string } } | undefined;
         const seoEntry = seoLink?.sys?.id ? entriesById.get(seoLink.sys.id) : undefined;
@@ -663,27 +663,27 @@ export const siteConfig: SiteConfig = {
     const base = canonicalUrlTemplate ? new URL(canonicalUrlTemplate).origin : '';
     let fullSlug: string | null = null;
     switch (entry.contentType) {
-      case 'Show':
+      case 'show':
         return `${base}/shows/${entry.slug}`;
-      case 'Story':
-        if (entry.parentContentType === 'Show') {
+      case 'story':
+        if (entry.parentContentType === 'show') {
           return `${base}/shows/${entry.parentSlug}/stories/${entry.slug}`;
         }
         fullSlug = urlWithParent(entry);
         return fullSlug ? `${base}/${fullSlug}` : `${base}/stories/${entry.slug}`;
-      case 'Event':
+      case 'event':
         fullSlug = urlWithParent(entry);
         return fullSlug ? `${base}/${fullSlug}` : `${base}/events/${entry.slug}`;
-      case 'Page':
+      case 'page':
         fullSlug = urlWithParent(entry);
         return fullSlug ? `${base}/${fullSlug}` : `${base}/pages/${entry.slug}`;
-      case 'LandingPage':
+      case 'landingPage':
         fullSlug = urlWithParent(entry);
         return fullSlug ? `${base}/${fullSlug}` : `${base}/${entry.slug}`;
-      case 'Category':
+      case 'category':
         fullSlug = urlWithParent(entry);
         return fullSlug ? `${base}/${fullSlug}` : `${base}/categories/${entry.slug}`;
-      case 'Person':
+      case 'person':
         return `${base}/people/${entry.slug}`;
       default:
         return null;

@@ -35,6 +35,8 @@
     "add-locations:dev": "dotenv -e .env.development -- contentful-app-scripts add-locations",
     "create-app-action": "CONTENTFUL_HOST=api.contentful.com tsx -r dotenv/config ./src/tools/create-app-action.ts",
     "create-app-action:dev": "dotenv -e .env.development -- cross-env CONTENTFUL_HOST=api.contentful.com tsx ./src/tools/create-app-action.ts",
+    "update-app-definition": "CONTENTFUL_HOST=api.contentful.com tsx -r dotenv/config ./src/tools/update-app-definition.ts",
+    "update-app-definition:dev": "dotenv -e .env.development -- cross-env CONTENTFUL_HOST=api.contentful.com tsx ./src/tools/update-app-definition.ts",
     "preview-article": "tsx -r dotenv/config ./src/tools/preview-article.ts",
     "preview-article:dev": "dotenv -e .env.development -- tsx ./src/tools/preview-article.ts",
     "update-docs": "tsx ./scripts/update-docs.ts",

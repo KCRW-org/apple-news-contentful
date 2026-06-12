@@ -50,6 +50,20 @@ async function getAppleNewsData(
   }
 }
 
+/**
+ * True when the fetched entry is published with no pending draft changes —
+ * version === publishedVersion + 1 means the current version is exactly the
+ * published content. Only then is it safe to auto-publish after our field write:
+ * otherwise publishing would push someone's unfinished draft (or a never-published
+ * entry) live as a side effect of an Apple News operation. The publish action
+ * checks this up front, but drafts can appear between that check and the
+ * write-back, and the delete/refreshStatus paths have no up-front check at all.
+ */
+function canAutoPublish(entry: { sys: unknown }): boolean {
+  const sys = entry.sys as { version: number; publishedVersion?: number | null };
+  return sys.publishedVersion != null && sys.version === sys.publishedVersion + 1;
+}
+
 async function writeAppleNewsData(
   entryId: string,
   locale: string,
@@ -62,6 +76,7 @@ async function writeAppleNewsData(
     environmentId: ctx.environmentId,
     entryId,
   });
+  const safeToPublish = canAutoPublish(entry);
   const fields = (entry.fields ?? {}) as Record<string, Record<string, unknown>>;
   if (!fields[fieldName]) fields[fieldName] = {};
   fields[fieldName][locale] = data;
@@ -70,9 +85,12 @@ async function writeAppleNewsData(
     entry,
   );
   // Re-publish immediately so the appleNewsData write doesn't leave a pending draft.
-  // We validated before publishing that the entry had no unpublished changes, so the
-  // only new draft change is this field. A publish failure here is non-fatal — the
-  // Apple News operation already succeeded; the entry will just have one pending draft.
+  // A publish failure here is non-fatal — the Apple News operation already succeeded;
+  // the entry will just have one pending draft.
+  if (!safeToPublish) {
+    console.warn('[appleNews] Skipping auto-publish after appleNewsData write: entry %s has draft changes or is unpublished.', entryId);
+    return;
+  }
   try {
     await ctx.cma.entry.publish(
       { spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId },
@@ -94,6 +112,7 @@ async function clearAppleNewsData(
     environmentId: ctx.environmentId,
     entryId,
   });
+  const safeToPublish = canAutoPublish(entry);
   const fields = (entry.fields ?? {}) as Record<string, Record<string, unknown>>;
   if (fields[fieldName]) {
     delete fields[fieldName][locale];
@@ -102,6 +121,10 @@ async function clearAppleNewsData(
     { spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId },
     entry,
   );
+  if (!safeToPublish) {
+    console.warn('[appleNews] Skipping auto-publish after appleNewsData clear: entry %s has draft changes or is unpublished.', entryId);
+    return;
+  }
   try {
     await ctx.cma.entry.publish(
       { spaceId: ctx.spaceId, environmentId: ctx.environmentId, entryId },

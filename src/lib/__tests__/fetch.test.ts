@@ -39,7 +39,7 @@ const baseParams: AppInstallationParameters = {
 describe('resolveStory', () => {
   it('extracts title and description', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'My Story', shortDescription: 'A great story' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'My Story', shortDescription: 'A great story' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.title).toBe('My Story');
@@ -48,7 +48,7 @@ describe('resolveStory', () => {
 
   it('returns null description when field is absent', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'Title' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'Title' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.description).toBeNull();
@@ -58,7 +58,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           primaryImage: { sys: { id: 'photo1', linkType: 'Entry' } },
@@ -89,7 +89,7 @@ describe('resolveStory', () => {
       {
         entry1: {
           id: 'entry1',
-          contentType: 'Story',
+          contentType: 'story',
           fields: { title: 'Title', primaryImage: { sys: { id: 'photo1', linkType: 'Entry' } } },
         },
         photo1: {
@@ -116,7 +116,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           primaryImage: { sys: { id: 'photo1', linkType: 'Entry' } },
@@ -139,7 +139,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           hosts: [{ sys: { id: 'person-1' } }],
@@ -158,14 +158,14 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           shows: [{ sys: { id: 'show-1' } }],
           categories: [{ sys: { id: 'cat-1' } }],
         },
       },
-      'show-1': { id: 'show-1', contentType: 'Show', fields: { title: 'Morning Edition' } },
+      'show-1': { id: 'show-1', contentType: 'show', fields: { title: 'Morning Edition' } },
       'cat-1': { id: 'cat-1', contentType: 'category', fields: { title: 'News' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
@@ -177,7 +177,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           categories: [{ sys: { id: 'cat-1' } }, { sys: { id: 'cat-2' } }],
@@ -192,7 +192,7 @@ describe('resolveStory', () => {
 
   it('returns empty categoryIds when no categories are linked', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'Title' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'Title' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.categoryIds).toEqual([]);
@@ -200,7 +200,7 @@ describe('resolveStory', () => {
 
   it('resolves corrections field', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'T', corrections: 'A correction was made.' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'T', corrections: 'A correction was made.' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.corrections).toBe('A correction was made.');
@@ -208,7 +208,7 @@ describe('resolveStory', () => {
 
   it('returns empty embedMap and linkMap when body is null', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'T' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'T' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.embedMap.size).toBe(0);
@@ -218,7 +218,7 @@ describe('resolveStory', () => {
 
   it('returns empty warnings on a clean resolve', async () => {
     const source = makeSource({
-      entry1: { id: 'entry1', contentType: 'Story', fields: { title: 'T' } },
+      entry1: { id: 'entry1', contentType: 'story', fields: { title: 'T' } },
     });
     const story = await resolveStory('entry1', baseParams, source);
     expect(story.warnings).toEqual([]);
@@ -228,7 +228,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           primaryImage: { sys: { id: 'missing-photo', linkType: 'Entry' } },
@@ -246,7 +246,7 @@ describe('resolveStory', () => {
     const source = makeSource({
       entry1: {
         id: 'entry1',
-        contentType: 'Story',
+        contentType: 'story',
         fields: {
           title: 'Title',
           hosts: [{ sys: { id: 'missing-person' } }],
